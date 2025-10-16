@@ -25,8 +25,8 @@ dir.create(env$wd, showWarnings = F, recursive = T)
 setwd(env$wd)
 
 in_dir <- file.path(getwd(), "in")
-src_dir <- file.path(here::here(), "src", "telecom_towers")
-out_dir <- file.path(getwd(), "out", "telecom_towers_deterministic", "data")
+src_dir <- file.path(here::here(), "src")
+out_dir <- file.path(getwd(), "out", "data")
 dir.create(out_dir, showWarnings = F, recursive = T)
 
 # load data

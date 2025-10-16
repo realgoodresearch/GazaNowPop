@@ -73,10 +73,9 @@ source(here::here(".env"), local = env)
 dir.create(env$wd, showWarnings = F, recursive = T)
 setwd(env$wd)
 
-data_dir <- file.path(getwd(), "out", "telecom_towers_deterministic", "data")
-polio_dir <- file.path(getwd(), "out", "polio3", "1_base")
-src_dir <- file.path(here::here(), "src", "telecom_towers_deterministic")
-out_dir <- file.path(getwd(), "out", "telecom_towers_deterministic", "model")
+data_dir <- file.path(getwd(), "out", "data")
+src_dir <- file.path(here::here(), "src")
+out_dir <- file.path(getwd(), "out", "model")
 dir.create(out_dir, showWarnings = F, recursive = T)
 
 # load functions
@@ -97,9 +96,6 @@ mun_geo <- vect(file.path(data_dir, "mun_geo.gpkg"))
 mun_rast <- rast(file.path(data_dir, "mun_grid.tif"))
 nbr_geo <- vect(file.path(data_dir, "nbr_geo.gpkg"))
 nbr_rast <- rast(file.path(data_dir, "nbr_grid.tif"))
-
-fit_polio <- readRDS(file.path(polio_dir, "fit.rds"))
-mun_polio <- read.csv(file.path(polio_dir, "dat_mun_all.csv"))
 
 bldg_cover <- rast(file.path(data_dir, "osm_building_coverage.tif"))
 
@@ -441,74 +437,3 @@ for (f in lf) {
     append = F
   )
 }
-
-# #---- align with polio-based estimates ----#
-
-# dir.create(file.path(out_dir, "polio_adjusted"), showWarnings = F, recursive = T)
-
-# # municipality scaling factors from polio analysis
-# mun_scale <- as.data.frame(mun_geo) |>
-#   rename(ADM2_EN = Governorat, ADM3_EN = Name, ADM3_PCODE = PCOE_Munic) |>
-#   mutate(
-#     ADM2_PCODE = as.numeric(substr(ADM3_PCODE, 1, 3)),
-#     ADM3_PCODE = as.numeric(ADM3_PCODE)
-#   ) |>
-#   arrange(id) |>
-#   select(ADM2_PCODE, ADM2_EN, ADM3_PCODE, ADM3_EN, id) |>
-#   left_join(mun_polio |>
-#     select(ADM3_PCODE, idx) |>
-#     rename(polio_id = idx))
-
-# for (i in 1:nrow(mun_scale)) {
-#   polio_id <- mun_scale$polio_id[i]
-#   if (is.na(polio_id)) {
-#     mun_scale[i, "polio_estimate"] <- 0
-#   } else {
-#     draws <- fit_polio$draws(paste0("N[", polio_id, "]"), format = "df") |>
-#       select(-contains(".")) |>
-#       pull()
-#     mun_scale[i, "polio_estimate"] <- mean(draws)
-#   }
-# }
-
-# date <- "2025-02-24"
-# subs <- rast(file.path(out_dir, "telecom_population", paste0("population_", date, ".tif")))
-# scale_rast <- mastergrid
-# for (i in 1:nrow(mun_scale)) {
-#   polio_est <- mun_scale$polio_estimate[i]
-#   mun_id <- mun_scale$id[i]
-#   telco_est <- sum(subs[mun_rast == mun_id])
-#   scale_factor <- polio_est / telco_est
-#   scale_rast[mun_rast == mun_id] <- scale_factor
-# }
-
-# writeRaster(scale_rast, file.path(out_dir, "polio_adjusted", "scale_factor.tif"), overwrite = T)
-
-# # population raster
-# pop_ras <- subs * scale_rast
-# plot(pop_ras)
-# sum(pop_ras[], na.rm = T)
-
-# writeRaster(pop_ras, file.path(out_dir, "polio_adjusted", paste0("polio_population_", date, ".tif")), overwrite = T)
-
-# # population per neighbourhood
-# pop_nbr <- nbr_geo |>
-#   st_as_sf() |>
-#   rename(
-#     ADM2_EN = Governorat,
-#     ADM2_PCODE = PCODE_Gove,
-#     ADM3_EN = Name_Munic,
-#     ADM3_PCODE = PCOE_Munic,
-#     ADM4_EN = Neighbourh,
-#     ADM4_PCODE = PCODE_Neig
-#   ) |>
-#   select(id, ADM2_EN, ADM2_PCODE, ADM3_EN, ADM3_PCODE, ADM4_EN, ADM4_PCODE)
-
-# pop_col <- paste0("pop_", date)
-# pop_nbr[, pop_col] <- NA
-
-# for (i in 1:nrow(pop_nbr)) {
-#   pop_nbr[i, pop_col] <- sum(pop_ras[nbr_rast == pop_nbr$id[i]])
-# }
-
-# st_write(pop_nbr, file.path(out_dir, "polio_adjusted", paste0("pop_nbr_", date, ".gpkg")), append = F)
