@@ -1,0 +1,192 @@
+---
+title: "Gridded population nowcasting update for the Gaza Strip using telecommunications data from June 9, 2025"
+author: Douglas R. Leasure\footnote{Senior Researcher and Data Scientist, Demographic Science Unit, Nuffield Department of Population Health, University of Oxford}  and Firas Qaimary\footnote{A/Head Information Management Unit, Occupied Palestinian Territory, United Nations Office for Coordination of Humanitarian Affairs}
+date: "15 June 2025"
+format: 
+    pdf:
+        number-sections: false
+        toc: false
+        toc-depth: 3
+        latex-engine: xelatex
+fontfamily: roboto
+fontsize: 12pt
+geometry: a4paper
+output: pdf_document
+---
+
+**Classification:** Strictly Confidential\footnote{See UNOCHA (2024) Information Sharing Protocol for the Occupied Palestinian Territory, available from https://www.unocha.org/publications/report/occupied-palestinian-territory/information-sharing-protocol-occupied-palestinian-territory-june-2024}  
+
+**Sensitivity:** Severe Sensitivity  
+
+**Suggested Citation:** Leasure DR and Qaimary F. 2025. Gridded population nowcasting update for the Gaza Strip using telecommunications data from June 9, 2025. Published June 15, 2025.
+
+\vfill
+*While every effort was given to produce data suitable for operational purposes, the results are provided "as is" without warranty of any kind. In no event shall the authors or copyright holders be liable for any claim, damages or other liability arising from, out of or in connection with the contents of this report, supplementary data, or source code.*
+
+\newpage
+
+\hypersetup{linkcolor=black}
+<!-- \setcounter{tocdepth}{3}
+\tableofcontents -->
+
+
+```{r}
+#| include: false
+
+options(scipen = 999)
+
+# libraries
+library(dplyr)
+library(knitr)
+library(kableExtra)
+
+#---- USER OPTIONS ----#
+pop_date <- as.Date("2025-06-09")
+#----------------------#
+
+# directories
+data_dir <- file.path("wd", "out", "telecom_towers_deterministic", "results", paste0("Oxford_Gaza_NowPop_", pop_date))
+
+if (!dir.exists(data_dir)) {
+  data_dir <- file.path("..", data_dir)
+}
+
+# load data
+pop_gov <- read.csv(file.path(data_dir, "all_dates", "pop_gov_all_dates.csv")) |> filter(date == pop_date)
+pop_mun <- read.csv(file.path(data_dir, "all_dates", "pop_mun_all_dates.csv")) |> filter(date == pop_date)
+pop_nbr <- read.csv(file.path(data_dir, "all_dates", "pop_nbr_all_dates.csv")) |> filter(date == pop_date)
+```
+
+
+\newpage
+
+# Summary  
+
+- Counts of subscribers on each telecommunication tower across two mobile network operators were used to produce 100-m gridded population estimates for 9 June 2025.  
+- Gridded population estimates were aggregated to provide population estimates for neighbourhoods, municipalities, and governorates.  
+- Gridded population estimates are intended to provide flexibility to aggregate to various spatial units.  
+- While accuracy of aggregated population estimates (e.g. administrative units) are expected to be better than accuracy for 100-m grid cells, this methodology cannot produce quantitative measures of accuracy at any spatial scale.  
+- Evacuation orders were assumed to result in total evacuation for a 48 hour period (i.e. population estimates were forced to zero for areas under evacuation orders). In reality some evacuation zones may have small populations remaining, so we report those population estimates here as "<100" or "<500" (less than one hundred or less than five hundred people).  
+- The entire population of the Gaza strip was assumed to be within the coverage area of at least one telecommunications tower. Populations outside coverage areas of the mobile networks would be incorrectly allocated to an area with mobile coverage.  
+- See methodological report (Leasure and Qaimary 2025\footnote{Leasure DR and Qaimary F. 2025. Gridded population nowcasting methodology for the Gaza Strip using telecommunications data. Oxford University Innovation. April 15, 2025. Available upon request to UNOCHA through the Assessment and Information Management (AIM) Working Group.}) for further information.  
+
+\newpage
+# Population spatial distribution
+
+```{r}
+#| echo: false
+#| label: fig-pop-grid
+#| fig-cap: "Population estimates for every 100-m grid cell."
+#| fig-width: 6
+#| out.width: "100%"
+#| fig-align: center
+knitr::include_graphics(file.path(data_dir, "supplementary_data", paste0("fig_pop_grid_", pop_date, ".jpg")))
+```
+
+```{r}
+#| echo: false
+#| label: fig-pop-nbr
+#| fig-cap: "Gridded population estimates aggregated to neighborhoods."
+#| fig-width: 6
+#| out.width: "100%"
+#| fig-align: center
+knitr::include_graphics(file.path(data_dir, "supplementary_data", paste0("fig_pop_nbr_", pop_date, ".jpg")))
+```
+
+\newpage
+## Governorate-level
+```{r}
+#| echo: false
+#| label: tbl-pop-gov
+
+pop_gov |>
+  arrange(ADM2_PCODE) |>
+  select(ADM2_EN, population) |>
+  rename(
+    Governorate = ADM2_EN,
+    Population = population
+  ) |>
+  mutate(
+    Population = case_when(
+      Population > 500 ~ prettyNum(round(Population), big.mark = ","),
+      Population >= 100 & Population < 500 ~ "<500",
+      Population < 100 ~ "<100"
+    )
+  ) |>
+  kable(
+    caption = paste0("Population estimates for each governorate on ", format(pop_date, "%d %B %Y"), "."),
+    booktabs = TRUE
+  )
+```
+
+## Municipality-level
+```{r}
+#| echo: false
+#| label: tbl-pop-mun
+
+pop_mun |>
+  arrange(ADM2_PCODE, ADM3_PCODE) |>
+  select(ADM3_EN, ADM2_EN, population) |>
+  rename(
+    Governorate = ADM2_EN,
+    Municipality = ADM3_EN,
+    Population = population
+  ) |>
+  mutate(
+    Population = case_when(
+      Population > 500 ~ prettyNum(round(Population), big.mark = ","),
+      Population >= 100 & Population < 500 ~ "<500",
+      Population < 100 ~ "<100"
+    )
+  ) |>
+  kable(
+    caption = paste0("Population estimates for each municipality on ", format(pop_date, "%d %B %Y"), "."),
+    booktabs = TRUE
+  )
+```
+
+## Neighbourhood-level
+```{r}
+#| echo: false
+#| label: tbl-pop-nbr
+
+pop_nbr |>
+  arrange(ADM2_PCODE, ADM3_PCODE, ADM4_PCODE) |>
+  select(ADM4_EN, ADM3_EN, ADM2_EN, population) |>
+  rename(
+    Governorate = ADM2_EN,
+    Municipality = ADM3_EN,
+    Neighbourhood = ADM4_EN,
+    Population = population
+  ) |>
+  mutate(
+    Population = case_when(
+      Population > 500 ~ prettyNum(round(Population), big.mark = ","),
+      Population >= 100 & Population < 500 ~ "<500",
+      Population < 100 ~ "<100"
+    ),
+    Municipality = case_when(
+      nchar(Municipality) > 12 ~ paste0(substr(Municipality, 1, 12), "..."),
+      TRUE ~ Municipality
+    )
+  ) |>
+  kable(
+    caption = paste0("Population estimates for each neighbourhood on ", format(pop_date, "%d %B %Y"), "."),
+    booktabs = TRUE
+  )
+```
+
+\newpage
+# Supplementary Data
+
+The following supplementary data accompany this report and are available upon request to UNOCHA through the Assessment and Information Management (AIM) Working Group:  
+
+1. pop_grid_[date].tif - 100-m gridded population estimates for the most recent date in geotiff format.  
+2. pop_nbr_[date].gpkg - Neighbourhood-level population estimates for the most recent date in geopackage format to include spatial geometries defining neighbourhood boundaries.  
+3. pop_nbr_all_dates.csv - Neighbourhood-level population estimates for all available dates in comma-separated-values format.  
+4. pop_mun_[date].gpkg - Municipality-level population estimates for the most recent date in geopackage format to include spatial geometries defining municipality boundaries.  
+5. pop_mun_all_dates.csv - Municipality-level population estimates for all available dates in comma-separated-values format.  
+6. pop_gov_[date].gpkg - Governorate-level population estimates for the most recent date in geopackage format to include spatial geometries defining governorate boundaries.  
+7. pop_gov_all_dates.csv - Governorate-level population estimates for all available dates in comma-separated-values format.  
+8. fig_pop_grid_[date].jpg - A map of gridded population estimates for the most recent date (@fig-pop-grid) in JPEG format.  
+9. fig_pop_nbr_[date].jpg - A map of neighborhood-level population estimates for the most recent date (@fig-pop-nbr) in JPEG format.  
