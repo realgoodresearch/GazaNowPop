@@ -57,15 +57,13 @@ telecoms <- read.csv(file.path(in_dir, "telecoms", "telecoms_20250615.csv"))
 bldgs <- st_read(file.path(in_dir, "osm_buildings", "osm_buildings_gaza.gpkg"))
 
 evac <- read.csv(file.path(
-  here::here(),
-  "data",
-  "evacuation_orders",
+  in_dir,
+  "evacuation",
   "evacuation_orders.csv"
 ))
 evac_geo <- st_read(file.path(
-  here::here(),
-  "data",
-  "evacuation_orders",
+  in_dir,
+  "evacuation",
   "dash_population_blocks.geojson"
 ))
 
