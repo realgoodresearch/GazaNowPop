@@ -21,9 +21,9 @@ source(here::here(".env"), local = env)
 dir.create(env$wd, showWarnings = F, recursive = T)
 setwd(env$wd)
 
-data_dir <- file.path(getwd(), "out", "telecom_towers_deterministic", "data")
-model_dir <- file.path(getwd(), "out", "telecom_towers_deterministic", "model")
-out_dir <- file.path(getwd(), "out", "telecom_towers_deterministic", "results")
+data_dir <- file.path(getwd(), "out", "data")
+model_dir <- file.path(getwd(), "out", "model")
+out_dir <- file.path(getwd(), "out", "results")
 dir.create(out_dir, showWarnings = F, recursive = T)
 
 # current date
