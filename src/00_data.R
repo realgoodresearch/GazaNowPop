@@ -52,26 +52,26 @@ nbr_geo <- st_read(file.path(
   "Neighbourhoods_Population_polygons.shp"
 ))
 
-telecoms <- read.csv(file.path(in_dir, "telecoms", "telecoms_20250615.csv"))
+telecoms <- read.csv(file.path(in_dir, "telecoms", "telecoms_20251016.csv"))
 
 bldgs <- st_read(file.path(in_dir, "osm_buildings", "osm_buildings_gaza.gpkg"))
 
 evac <- read.csv(file.path(
   in_dir,
-  "evacuation",
+  "evacuation_orders",
   "evacuation_orders.csv"
 ))
 evac_geo <- st_read(file.path(
   in_dir,
-  "evacuation",
+  "evacuation_orders",
   "dash_population_blocks.geojson"
 ))
 
 evac_buffers <- list()
-lf <- list.files(file.path("in", "evacuation"))
+lf <- list.files(file.path("in", "evacuation_buffers"))
 for (f in lf) {
   date <- sub("^.*_(.*)\\.gpkg$", "\\1", f)
-  evac_buffers[[date]] <- st_read(file.path("in", "evacuation", f))
+  evac_buffers[[date]] <- st_read(file.path("in", "evacuation_buffers", f))
 }
 
 # mastergrid

@@ -30,7 +30,7 @@ dir.create(out_dir, showWarnings = F, recursive = T)
 lf <- list.files(file.path(model_dir, "telecom_population"))
 dates <- as.Date(sub("^.*_(.*)\\.tif$", "\\1", lf))
 current_date <- max(dates)
-# current_date <- "2025-04-10"
+# current_date <- "2025-09-14"
 
 # packaged supplementary data directory
 pkg_dir <- file.path(out_dir, paste0("Oxford_Gaza_NowPop_", current_date))
