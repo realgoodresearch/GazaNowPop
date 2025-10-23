@@ -3,54 +3,19 @@ rm(list = ls())
 gc()
 
 #---- USER OPTIONS ----#
-kappa <- 2
 binary_bldg_mask <- FALSE
-
-date_link <- data.frame(
-  rbind(
-    c('2025-01-30', '2025-01-27'),
-    c('2025-02-02', '2025-02-02'),
-    c('2025-02-06', '2025-02-05'),
-    c('2025-02-10', '2025-02-10'),
-    c('2025-02-13', '2025-02-13'),
-    c('2025-02-17', '2025-02-16'),
-    c('2025-02-20', '2025-02-20'),
-    c('2025-02-24', '2025-02-24'),
-    c('2025-03-03', '2025-03-03'),
-    c('2025-03-13', '2025-03-13'),
-    c('2025-03-17', '2025-03-17'),
-    c('2025-03-24', '2025-03-24'),
-    c('2025-03-31', '2025-04-01'),
-    c('2025-04-10', '2025-04-09'),
-    c('2025-04-14', '2025-04-14'),
-    c('2025-04-17', '2025-04-15'),
-    c('2025-04-21', '2025-04-21'),
-    c('2025-05-12', '2025-05-13'),
-    c('2025-05-19', '2025-05-19'),
-    c('2025-05-25', '2025-05-25'),
-    c('2025-06-09', '2025-06-09'),
-    c('2025-06-23', '2025-06-23'),
-    c('2025-09-14', '2025-09-14'),
-    c('2025-09-21', '2025-09-21'),
-    c('2025-09-24', '2025-09-24'),
-    c('2025-09-29', '2025-09-29'),
-    c('2025-10-12', '2025-10-13'),
-    c('2025-10-19', '2025-10-19')
-  ),
-  stringsAsFactors = FALSE
-)
-names(date_link) <- c('provider1', 'provider2')
-
-
+reference_date <- "2025-10-19"
+max_tower_radius <- 2 # max tower radius (km)
 #----------------------#
 
 # load libraries
 library(dplyr)
 library(terra)
 library(sf)
+library(purrr)
 
 # encoding for Arabic
-Sys.setlocale("LC_ALL", "en_US.UTF-8") # Adjust for your OS
+Sys.setlocale("LC_ALL", "en_US.UTF-8")
 
 # load environment
 env <- new.env()
@@ -63,18 +28,16 @@ setwd(env$wd)
 in_dir <- file.path(getwd(), "in")
 data_dir <- file.path(getwd(), "out", "data")
 src_dir <- file.path(here::here(), "src")
-out_dir <- file.path(getwd(), "out", "model")
+out_dir <- file.path(getwd(), "out", "model", reference_date)
 dir.create(out_dir, showWarnings = F, recursive = T)
 
 # load functions
 source(file.path(src_dir, "10_model_fun.R"))
 
-# load data
+#---- load data ----#
+date_link <- read.csv(file.path(in_dir, "telecoms", "telecoms_date_link.csv"))
+
 mastergrid <- rast(file.path(data_dir, "mastergrid.tif"))
-distance1 <- readRDS(file.path(data_dir, "distance1.rds"))
-distance2 <- readRDS(file.path(data_dir, "distance2.rds"))
-radius1 <- readRDS(file.path(data_dir, "radius1.rds"))
-radius2 <- readRDS(file.path(data_dir, "radius2.rds"))
 telco1 <- read.csv(file.path(data_dir, "telco1.csv"))
 telco2 <- read.csv(file.path(data_dir, "telco2.csv"))
 
@@ -101,66 +64,134 @@ for (f in lf) {
   evac_buffers[[date]] <- rast(file.path(data_dir, "evacuation_buffers", f))
 }
 
+#---- telecoms ----#
 
-# check telecoms dates
-telco1 |>
-  select(date) |>
-  distinct() |>
-  arrange() |>
-  pull()
+# filter to reference date
+telco_dates <- date_link %>%
+  filter(date == reference_date) %>%
+  select(provider1, provider2) %>%
+  as.vector()
 
-cat('\n')
+telco1 <- telco1 %>%
+  filter(date == telco_dates[1])
 
-telco2 |>
-  select(date) |>
-  distinct() |>
-  arrange() |>
-  pull()
+telco2 <- telco2 %>%
+  filter(date == telco_dates[2])
 
 
-#---- tower coverage probabilities ----#
-plot(
-  y = detection(r = 1, kappa = 3, d = seq(0, 5, 0.1)),
-  x = seq(0, 5, 0.1),
-  type = 'l',
-  main = 'Tower coverage function',
-  xlab = 'distance (km)',
-  ylab = 'detection probability'
+#---- towers ----#
+towers1_geo <- telco1 |>
+  distinct(latitude, longitude, .keep_all = TRUE) |>
+  st_as_sf(coords = c("longitude", "latitude"), crs = 4326, remove = FALSE)
+
+towers2_geo <- telco2 |>
+  distinct(latitude, longitude, .keep_all = TRUE) |>
+  st_as_sf(coords = c("longitude", "latitude"), crs = 4326, remove = FALSE)
+
+st_write(towers1_geo, file.path(out_dir, "towers1_geo.gpkg"), append = FALSE)
+st_write(towers2_geo, file.path(out_dir, "towers2_geo.gpkg"), append = FALSE)
+
+
+#---- tower buffers ----#
+towers1_buffer <- st_buffer(towers1_geo, max_tower_radius * 1e3)
+plot(towers1_buffer %>% select(tower_id))
+
+towers2_buffer <- st_buffer(towers2_geo, max_tower_radius * 1e3)
+plot(towers2_buffer %>% select(tower_id))
+
+st_write(
+  towers1_buffer,
+  file.path(out_dir, "towers1_buffer.gpkg"),
+  append = FALSE
+)
+
+st_write(
+  towers2_buffer,
+  file.path(out_dir, "towers2_buffer.gpkg"),
+  append = FALSE
 )
 
 
-p1 <- tower_coverage(
-  dist = distance1,
-  rad = radius1,
-  mastergrid = mastergrid,
-  kappa = kappa
+#---- tower voronoi ----#
+env <- st_union(st_as_sf(gov_geo)) %>%
+  st_make_valid() %>%
+  st_transform(crs = "EPSG: 32636")
+
+# provider 1
+pnt1 <- st_union(towers1_geo) %>%
+  st_make_valid() %>%
+  st_transform(crs = "EPSG: 32636")
+
+voronoi1 <- st_voronoi(pnt1, env) %>%
+  st_collection_extract("POLYGON") %>%
+  st_sfc() %>%
+  st_intersection(env) %>%
+  st_make_valid() %>%
+  st_transform(st_crs(towers1_geo))
+
+# provider 2
+pnt2 <- st_union(towers2_geo) %>%
+  st_make_valid() %>%
+  st_transform(crs = "EPSG: 32636")
+
+voronoi2 <- st_voronoi(pnt2, env) %>%
+  st_collection_extract("POLYGON") %>%
+  st_sfc() %>%
+  st_intersection(env) %>%
+  st_make_valid() %>%
+  st_transform(st_crs(towers2_geo))
+
+towers1_voronoi <- join_towers_to_voronoi(towers1_geo, voronoi1)
+towers2_voronoi <- join_towers_to_voronoi(towers2_geo, voronoi2)
+
+plot(towers1_voronoi %>% select(tower_id))
+plot(towers2_voronoi %>% select(tower_id))
+
+st_write(
+  towers1_voronoi,
+  file.path(out_dir, "towers1_voronoi.gpkg"),
+  append = FALSE
 )
 
-p2 <- tower_coverage(
-  dist = distance2,
-  rad = radius2,
-  mastergrid = mastergrid,
-  kappa = kappa
+st_write(
+  towers2_voronoi,
+  file.path(out_dir, "towers2_voronoi.gpkg"),
+  append = FALSE
 )
 
-saveRDS(p1, file.path(out_dir, "tower_coverage1.rds"))
-saveRDS(p2, file.path(out_dir, "tower_coverage2.rds"))
 
-# random spot checks
-p_spot_check(
-  tower_id = round(runif(1, 1, length(radius1))),
-  p = p1
+#---- buffered tower voronoi polygons ----#
+towers1_buff_voronoi <- intersect_voronoi_buffer(
+  towers1_voronoi,
+  towers1_buffer
 )
+towers2_buff_voronoi <- intersect_voronoi_buffer(
+  towers2_voronoi,
+  towers2_buffer
+)
+
+st_write(
+  towers1_buff_voronoi,
+  file.path(out_dir, "towers1_buff_voronoi.gpkg"),
+  append = FALSE
+)
+st_write(
+  towers2_buff_voronoi,
+  file.path(out_dir, "towers2_buff_voronoi.gpkg"),
+  append = FALSE
+)
+
 
 #---- mask ----#
 
-# building cover
+# building cover raster
 bldg_ras <- bldg_cover
 if (binary_bldg_mask) {
   bldg_ras[bldg_ras > 0] <- 1
 }
 plot(bldg_ras)
 
+# building mask
 bldg_mask <- matrix(
   bldg_ras[],
   nrow = nrow(bldg_cover),
@@ -169,272 +200,103 @@ bldg_mask <- matrix(
 bldg_mask <- bldg_mask / max(bldg_mask, na.rm = T)
 
 # masks
-p_mask1 <- build_mask(
-  dates = sort(unique(telco1$date)),
+mask <- build_mask(
+  ref_date = reference_date,
   evac = evac,
   evac_buffers = evac_buffers,
   bldg_mask = bldg_mask,
   mastergrid = mastergrid
 )
 
-p_mask2 <- build_mask(
-  dates = sort(unique(telco2$date)),
-  evac = evac,
-  evac_buffers = evac_buffers,
-  bldg_mask = bldg_mask,
-  mastergrid = mastergrid
-)
+writeRaster(mask, file.path(out_dir, "mask.tif"), overwrite = TRUE)
 
 #---- subscriber rasters ----#
-subscriber_raster(
-  telco = telco1,
-  p_tower = p1,
-  p_mask = p_mask1,
-  mastergrid = mastergrid,
-  outpath = file.path(out_dir, "provider_rasters", "provider1.tif")
+
+# voronoi zones
+voronoi1_zones <- terra::rasterize(
+  x = towers1_buff_voronoi %>% st_transform(crs = crs(mastergrid)) %>% vect(),
+  y = rast(mastergrid),
+  field = "tower_id",
+  background = NA
 )
 
-subscriber_raster(
-  telco = telco2,
-  p_tower = p2,
-  p_mask = p_mask2,
-  mastergrid = mastergrid,
-  outpath = file.path(out_dir, "provider_rasters", "provider2.tif")
+voronoi2_zones <- terra::rasterize(
+  x = towers2_buff_voronoi %>% st_transform(crs = crs(mastergrid)) %>% vect(),
+  y = rast(mastergrid),
+  field = "tower_id",
+  background = NA
 )
 
-#---- sum subscribers across providers ----#
-dir.create(
-  file.path(out_dir, "subscribers_combined"),
-  showWarnings = F,
-  recursive = T
-)
-
-for (row in 1:nrow(date_link)) {
-  dates <- unlist(as.vector(date_link[row, ]))
-
-  # total subscribers across both providers
-  ras1 <- rast(file.path(
-    out_dir,
-    "provider_rasters",
-    paste0("provider1_", dates[1], ".tif")
-  ))
-  ras2 <- rast(file.path(
-    out_dir,
-    "provider_rasters",
-    paste0("provider2_", dates[2], ".tif")
-  ))
-  ras <- ras1 + ras2
-  writeRaster(
-    ras,
-    file.path(
-      out_dir,
-      "subscribers_combined",
-      paste0("subscribers_", max(dates), ".tif")
-    ),
-    overwrite = T
-  )
+# subscriber spatial redistribution factors
+mask1 <- rast(mastergrid)
+for(tower_id in unique(sort(towers1_voronoi$tower_id))){
+  values <- as.vector(mask[voronoi1_zones == tower_id])
+  denom <- sum(values, na.rm=T)
+  mask1[voronoi1_zones == tower_id] <- values / denom
+  # check: sum(mask1[voronoi1_zones == tower_id], na.rm=T) == 1
 }
 
-#---- extrapolate subscribers to population ----#
-dir.create(
-  file.path(out_dir, "telecom_population"),
-  showWarnings = F,
-  recursive = T
-)
-
-# penetration (based on polio)
-ras <- rast(file.path(
-  out_dir,
-  "subscribers_combined",
-  "subscribers_2025-02-24.tif"
-))
-pop_gov_polio <- c(373190, 724521, 346678, 494301, 161310)
-pop_gov_mosd <- c(283559, 672363, NA, NA, NA)
-pop_gov_ocha <- c(283559, 672363, 436387, 594653, 91487)
-
-true_pop_gov <- c(pop_gov_mosd[1:2], pop_gov_polio[3:5])
-
-penetration <- c()
-for (i in 1:nrow(gov_geo)) {
-  subscribers <- sum(ras[gov_rast == i], na.rm = T)
-  penetration[i] <- subscribers / true_pop_gov[i]
+mask2 <- rast(mastergrid)
+for(tower_id in unique(sort(towers2_voronoi$tower_id))){
+  values <- as.vector(mask[voronoi2_zones == tower_id])
+  denom <- sum(values, na.rm=T)
+  mask2[voronoi2_zones == tower_id] <- values / denom
+  # check: sum(mask2[voronoi2_zones == tower_id], na.rm=T) == 1
 }
 
-penetration_df <- gov_geo |>
-  as.data.frame() |>
-  rename(ADM2_EN = Name, ADM2_PCODE = PCODE) |>
-  select(ADM2_EN, ADM2_PCODE) |>
-  mutate(pent = penetration) |>
-  rename(penetration = pent)
+plot(mask1)
+plot(mask2)
 
-write.csv(penetration_df, file.path(out_dir, "penetration.csv"), row.names = F)
-
-
-lf <- list.files(file.path(out_dir, "subscribers_combined"))
-dates <- sub("^.*_(.*)\\.tif$", "\\1", lf)
-adjustment_df <- data.frame(
-  date = dates,
-  adjustment = NA
+# rasterise total subscribers per zone
+subscribers1_per_zone <- terra::rasterize(
+  x = towers1_voronoi %>% st_transform(crs = crs(mastergrid)) %>% vect(),
+  y = rast(mastergrid),
+  field = "subscribers",
+  background = NA
 )
-for (fi in 1:length(lf)) {
-  # penetration <- sum(ras[], na.rm = T) / 2.1e6
-  # ras_scaled <- ras / penetration
 
-  f <- lf[fi]
-  date <- dates[fi]
+subscribers2_per_zone <- terra::rasterize(
+  x = towers2_voronoi %>% st_transform(crs = crs(mastergrid)) %>% vect(),
+  y = rast(mastergrid),
+  field = "subscribers",
+  background = NA
+)
 
-  subscribers <- rast(file.path(out_dir, "subscribers_combined", f))
+# subscriber rasters
+subscribers1 <- subscribers1_per_zone * mask1
+subscribers2 <- subscribers2_per_zone * mask2
 
-  population <- mastergrid
-  population[mastergrid == 1] <- 0
+plot(subscribers1)
+plot(subscribers2)
 
-  for (i in 1:nrow(gov_geo)) {
-    population[gov_rast == i] <- subscribers[gov_rast == i] / penetration[i]
-  }
-
-  penetration_adjustment <- sum(population[], na.rm = T) / 2.1e6
-  population <- population / penetration_adjustment
-
-  adjustment_df[fi, "adjustment"] <- penetration_adjustment
-
-  writeRaster(
-    population,
-    file.path(
-      out_dir,
-      "telecom_population",
-      paste0("population_", date, ".tif")
-    ),
-    overwrite = T
-  )
-}
-
-write.csv(
-  adjustment_df,
-  file.path(out_dir, "penetration_adjustment.csv"),
-  row.names = F
+writeRaster(
+  subscribers1,
+  file.path(out_dir, "subscribers1.tif"),
+  overwrite = TRUE
+)
+writeRaster(
+  subscribers2,
+  file.path(out_dir, "subscribers2.tif"),
+  overwrite = TRUE
 )
 
 
-#---- populations by admin ----#
-dir.create(
-  file.path(out_dir, "telecom_population_neighbourhood"),
-  showWarnings = F,
-  recursive = T
-)
-dir.create(
-  file.path(out_dir, "telecom_population_municipality"),
-  showWarnings = F,
-  recursive = T
-)
-dir.create(
-  file.path(out_dir, "telecom_population_governorate"),
-  showWarnings = F,
-  recursive = T
-)
+#---- population estimation ----#
 
+# sum subscribers across providers
+subscribers1[is.na(subscribers1)] <- 0
+subscribers2[is.na(subscribers2)] <- 0
 
-lf <- list.files(file.path(out_dir, "telecom_population"))
-for (f in lf) {
-  pop_ras <- rast(file.path(out_dir, "telecom_population", f))
-  current_date <- sub("^.*_(.*)\\.tif$", "\\1", f)
+subscribers <- subscribers1 + subscribers2
+subscribers[subscribers == 0] <- NA
 
-  # neighbourhoods
-  pop_nbr <- nbr_geo |>
-    st_as_sf() |>
-    rename(
-      ADM2_EN = Governorat,
-      ADM2_PCODE = PCODE_Gove,
-      ADM3_EN = Name_Munic,
-      ADM3_PCODE = PCOE_Munic,
-      ADM4_EN = Neighbourh,
-      ADM4_PCODE = PCODE_Neig
-    ) |>
-    mutate(
-      date = current_date,
-      population = NA
-    ) |>
-    select(
-      id,
-      ADM2_EN,
-      ADM2_PCODE,
-      ADM3_EN,
-      ADM3_PCODE,
-      ADM4_EN,
-      ADM4_PCODE,
-      date,
-      population
-    ) |>
-    arrange(ADM2_PCODE, ADM3_PCODE, ADM4_PCODE)
+plot(subscribers)
 
-  for (i in 1:nrow(pop_nbr)) {
-    pop_nbr[i, "population"] <- sum(pop_ras[nbr_rast == pop_nbr$id[i]])
-  }
+# population
+penetration <- sum(as.vector(subscribers), na.rm=T) / 2.1e6
 
-  st_write(
-    pop_nbr,
-    file.path(
-      out_dir,
-      "telecom_population_neighbourhood",
-      paste0("population_", current_date, ".gpkg")
-    ),
-    append = F
-  )
+population <- subscribers / penetration
 
-  # municipality
-  pop_mun <- mun_geo |>
-    st_as_sf() |>
-    rename(
-      ADM2_EN = Governorat,
-      ADM3_EN = Name,
-      ADM3_PCODE = PCOE_Munic
-    ) |>
-    mutate(
-      ADM2_PCODE = substr(ADM3_PCODE, 1, 3),
-      date = current_date,
-      population = NA
-    ) |>
-    select(id, ADM2_EN, ADM2_PCODE, ADM3_EN, ADM3_PCODE, date, population) |>
-    arrange(ADM2_PCODE, ADM3_PCODE)
+plot(population)
 
-  for (i in 1:nrow(pop_mun)) {
-    pop_mun$population[i] <- sum(pop_ras[mun_rast == pop_mun$id[i]], na.rm = T)
-  }
-
-  st_write(
-    pop_mun,
-    file.path(
-      out_dir,
-      "telecom_population_municipality",
-      paste0("population_", current_date, ".gpkg")
-    ),
-    append = F
-  )
-
-  # governorate
-  pop_gov <- gov_geo |>
-    st_as_sf() |>
-    rename(
-      ADM2_EN = Name,
-      ADM2_PCODE = PCODE
-    ) |>
-    mutate(
-      population = NA,
-      date = current_date
-    ) |>
-    select(id, ADM2_EN, ADM2_PCODE, date, population) |>
-    arrange(ADM2_PCODE)
-
-  for (i in 1:nrow(pop_gov)) {
-    pop_gov$population[i] <- sum(pop_ras[gov_rast == pop_gov$id[i]], na.rm = T)
-  }
-
-  st_write(
-    pop_gov,
-    file.path(
-      out_dir,
-      "telecom_population_governorate",
-      paste0("population_", current_date, ".gpkg")
-    ),
-    append = F
-  )
-}
+writeRaster(population, file.path(out_dir, "population.tif"), overwrite=TRUE)
