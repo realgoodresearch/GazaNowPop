@@ -52,7 +52,7 @@ nbr_geo <- st_read(file.path(
   "Neighbourhoods_Population_polygons.shp"
 ))
 
-telecoms <- read.csv(file.path(in_dir, "telecoms", "telecoms_20251016.csv"))
+telecoms <- read.csv(file.path(in_dir, "telecoms", "telecoms_20251022.csv"))
 
 bldgs <- st_read(file.path(in_dir, "osm_buildings", "osm_buildings_gaza.gpkg"))
 

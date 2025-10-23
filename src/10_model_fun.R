@@ -1,3 +1,11 @@
+# detection probability
+detection <- function(r, kappa = 2, d = seq(0, 5, 0.1)) {
+  p <- (1 + exp(-kappa * r)) / (1 + exp(kappa * (d - r)))
+  p[p < 0.01] <- 0
+  p <- p / sum(p, na.rm = T)
+  return(p)
+}
+
 # tower coverage layers
 tower_coverage <- function(dist, rad, mastergrid, kappa = 10) {
   # dist = distance1
@@ -9,11 +17,16 @@ tower_coverage <- function(dist, rad, mastergrid, kappa = 10) {
   result <- array(NA, dim = c(n_towers, dim(mastergrid)[1:2]))
 
   for (tower in 1:n_towers) {
-    d <- dist[tower, ] / 1e3
-    r <- rad[tower] / 1e3
-    p <- (1 + exp(-kappa * r)) / (1 + exp(kappa * (d - r)))
-    p[p < 0.01] <- 0
-    p <- p / sum(p, na.rm = T)
+    # d <- dist[tower, ] / 1e3
+    # r <- rad[tower] / 1e3
+    # p <- (1 + exp(-kappa * r)) / (1 + exp(kappa * (d - r)))
+    # p[p < 0.01] <- 0
+    # p <- p / sum(p, na.rm = T)
+    p <- detection(
+      kappa = kappa,
+      r = rad[tower] / 1e3,
+      d = dist[tower, ] / 1e3
+    )
 
     ras <- mastergrid
     values(ras) <- NA
