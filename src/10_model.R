@@ -33,7 +33,9 @@ date_link <- data.frame(
     c('2025-09-14', '2025-09-14'),
     c('2025-09-21', '2025-09-21'),
     c('2025-09-24', '2025-09-24'),
-    c('2025-10-13', '2025-10-13')
+    c('2025-09-29', '2025-09-29'),
+    c('2025-10-12', '2025-10-13'),
+    c('2025-10-19', '2025-10-19')
   ),
   stringsAsFactors = FALSE
 )
@@ -117,6 +119,16 @@ telco2 |>
 
 
 #---- tower coverage probabilities ----#
+plot(
+  y = detection(r = 1, kappa = 3, d = seq(0, 5, 0.1)),
+  x = seq(0, 5, 0.1),
+  type = 'l',
+  main = 'Tower coverage function',
+  xlab = 'distance (km)',
+  ylab = 'detection probability'
+)
+
+
 p1 <- tower_coverage(
   dist = distance1,
   rad = radius1,
