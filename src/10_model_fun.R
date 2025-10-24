@@ -141,3 +141,99 @@ intersect_voronoi_buffer <- function(voronois, buffers) {
 
   return(result)
 }
+
+
+# merge voronoi if masked out
+merge_masked_voronoi <- function(towers, voronoi, mask) {
+  # towers_geo           : sf POINT with column tower_id
+  # towers_buff_voronoi  : sf POLYGON with column tower_id
+  # mask                 : terra SpatRaster
+
+  #---- sum raster cells per polygon and find polygons with sum == 0 ----#
+
+  # convert polygons to terra vect for extract
+  pol_v <- terra::vect(voronoi)
+  ex <- terra::extract(mask, pol_v, fun = sum, na.rm = TRUE)
+  pol_sums <- ex[, 2]
+
+  zero_idx <- which(is.na(pol_sums) | pol_sums == 0)
+  if (length(zero_idx) == 0) {
+    message("No polygons have raster-cell sum == 0. Returning original object.")
+    voronoi_new <- voronoi
+  } else {
+    # copy working sf
+    work_polys <- voronoi %>% st_make_valid() %>% mutate(tower_id_merged = NA)
+    work_points <- towers %>% st_make_valid()
+
+    # process each zero-sum polygon, updating work_polys as we go to avoid double-merge conflicts
+    for (i in seq_along(zero_idx)) {
+      # index in original ordering -> get tower_id
+      orig_index <- zero_idx[i]
+      # find the tower_id value for that polygon (if polygons were reordered, safe to look up by matching)
+      pid_zero <- voronoi$tower_id[orig_index]
+
+      # check whether this pid_zero still exists in work_polys (it may have been removed by earlier merges)
+      if (!pid_zero %in% work_polys$tower_id) {
+        next
+      }
+
+      # point for the zero-sum tower
+      pt_zero <- work_points %>% filter(tower_id == pid_zero)
+      if (nrow(pt_zero) == 0) {
+        warning(paste("No point found for tower_id", pid_zero, "- skipping"))
+        next
+      }
+
+      # compute distances to all candidate points in work_points; exclude self
+      dists <- as.numeric(st_distance(pt_zero, work_points)) # vector of distances
+      self_idx <- which(work_points$tower_id == pid_zero)
+      dists[self_idx] <- Inf
+      nearest_idx <- which.min(dists)
+      pid_nearest <- work_points$tower_id[nearest_idx]
+
+      # if nearest is NA or Inf, skip
+      if (!is.finite(dists[nearest_idx])) {
+        warning(paste("No other towers available to merge with for", pid_zero))
+        next
+      }
+
+      # get polygons for the two ids from the current working polygons
+      poly_a <- work_polys %>% filter(tower_id == pid_zero)
+      poly_b <- work_polys %>% filter(tower_id == pid_nearest)
+
+      # If for some reason nearest polygon not found, skip
+      if (nrow(poly_b) == 0) {
+        warning(paste(
+          "Nearest polygon not found for",
+          pid_nearest,
+          "- skipping"
+        ))
+        next
+      }
+
+      # 3) union the two polygons and build a merged row
+      merged_geom <- st_union(poly_a$geometry, poly_b$geometry) %>%
+        st_make_valid()
+
+      # create new attributes: keep a merged id (adjust as you prefer)
+      merged_row <- poly_b[1, ] # take attributes from nearest as base
+      merged_row$geometry <- merged_geom
+      merged_row$tower_id_merged <- ifelse(
+        !is.finite(merged_row$tower_id_merged),
+        pid_zero,
+        paste(merged_row$tower_id_merged, pid_zero, sep = '+')
+      )
+      merged_row$subscribers <- poly_a$subscribers + poly_b$subscribers
+
+      # remove original two polygons from work_polys and add merged_row
+      work_polys <- work_polys %>%
+        filter(!tower_id %in% c(pid_zero, pid_nearest)) %>%
+        bind_rows(merged_row) %>%
+        st_make_valid()
+      # also remove the merged point (optional) to avoid merging it again; we keep points unchanged here
+      # work_points <- work_points %>% filter(! tower_id %in% c(pid_zero, pid_nearest))
+    }
+    voronoi_new <- work_polys
+  }
+  return(voronoi_new)
+}
