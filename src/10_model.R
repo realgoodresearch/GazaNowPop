@@ -210,18 +210,48 @@ mask <- build_mask(
 
 writeRaster(mask, file.path(out_dir, "mask.tif"), overwrite = TRUE)
 
+
+#---- re-assign towers if catchment 100% masked out ----#
+
+towers1_catchment <- merge_masked_voronoi(
+  towers = towers1_geo, 
+  voronoi = towers1_buff_voronoi, 
+  mask = mask
+)
+
+towers2_catchment <- merge_masked_voronoi(
+  towers = towers2_geo, 
+  voronoi = towers2_buff_voronoi, 
+  mask = mask
+)
+
+st_write(
+  towers1_catchment,
+  file.path(out_dir, "towers1_catchment.gpkg"),
+  append = FALSE
+)
+
+st_write(
+  towers2_catchment,
+  file.path(out_dir, "towers2_catchment.gpkg"),
+  append = FALSE
+)
+
+
 #---- subscriber rasters ----#
 
 # voronoi zones
 voronoi1_zones <- terra::rasterize(
-  x = towers1_buff_voronoi %>% st_transform(crs = crs(mastergrid)) %>% vect(),
+  x = towers1_catchment %>% 
+    st_transform(crs = crs(mastergrid)) %>% vect(),
   y = rast(mastergrid),
   field = "tower_id",
   background = NA
 )
 
 voronoi2_zones <- terra::rasterize(
-  x = towers2_buff_voronoi %>% st_transform(crs = crs(mastergrid)) %>% vect(),
+  x = towers2_catchment %>% 
+    st_transform(crs = crs(mastergrid)) %>% vect(),
   y = rast(mastergrid),
   field = "tower_id",
   background = NA
@@ -229,7 +259,7 @@ voronoi2_zones <- terra::rasterize(
 
 # subscriber spatial redistribution factors
 mask1 <- rast(mastergrid)
-for(tower_id in unique(sort(towers1_voronoi$tower_id))){
+for(tower_id in unique(sort(towers1_catchment$tower_id))){
   values <- as.vector(mask[voronoi1_zones == tower_id])
   denom <- sum(values, na.rm=T)
   mask1[voronoi1_zones == tower_id] <- values / denom
@@ -237,7 +267,7 @@ for(tower_id in unique(sort(towers1_voronoi$tower_id))){
 }
 
 mask2 <- rast(mastergrid)
-for(tower_id in unique(sort(towers2_voronoi$tower_id))){
+for(tower_id in unique(sort(towers2_catchment$tower_id))){
   values <- as.vector(mask[voronoi2_zones == tower_id])
   denom <- sum(values, na.rm=T)
   mask2[voronoi2_zones == tower_id] <- values / denom
@@ -249,14 +279,16 @@ plot(mask2)
 
 # rasterise total subscribers per zone
 subscribers1_per_zone <- terra::rasterize(
-  x = towers1_voronoi %>% st_transform(crs = crs(mastergrid)) %>% vect(),
+  x = towers1_catchment %>% 
+    st_transform(crs = crs(mastergrid)) %>% vect(),
   y = rast(mastergrid),
   field = "subscribers",
   background = NA
 )
 
 subscribers2_per_zone <- terra::rasterize(
-  x = towers2_voronoi %>% st_transform(crs = crs(mastergrid)) %>% vect(),
+  x = towers2_catchment %>% 
+    st_transform(crs = crs(mastergrid)) %>% vect(),
   y = rast(mastergrid),
   field = "subscribers",
   background = NA
