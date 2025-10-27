@@ -41,7 +41,7 @@ library(knitr)
 library(kableExtra)
 
 #---- USER OPTIONS ----#
-pop_date <- as.Date("2025-06-09")
+pop_date <- as.Date("2025-10-19")
 #----------------------#
 
 # directories
