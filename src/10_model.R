@@ -214,14 +214,14 @@ writeRaster(mask, file.path(out_dir, "mask.tif"), overwrite = TRUE)
 #---- re-assign towers if catchment 100% masked out ----#
 
 towers1_catchment <- merge_masked_voronoi(
-  towers = towers1_geo, 
-  voronoi = towers1_buff_voronoi, 
+  towers = towers1_geo,
+  voronoi = towers1_buff_voronoi,
   mask = mask
 )
 
 towers2_catchment <- merge_masked_voronoi(
-  towers = towers2_geo, 
-  voronoi = towers2_buff_voronoi, 
+  towers = towers2_geo,
+  voronoi = towers2_buff_voronoi,
   mask = mask
 )
 
@@ -238,61 +238,65 @@ st_write(
 )
 
 
+# tower catchment as rasters for zonal statistics
+towers1_zones <- terra::rasterize(
+  x = towers1_catchment %>%
+    st_transform(crs = crs(mastergrid)) %>%
+    vect(),
+  y = rast(mastergrid),
+  field = "tower_id",
+  background = NA
+)
+
+towers2_zones <- terra::rasterize(
+  x = towers2_catchment %>%
+    st_transform(crs = crs(mastergrid)) %>%
+    vect(),
+  y = rast(mastergrid),
+  field = "tower_id",
+  background = NA
+)
+
 #---- subscriber rasters ----#
-
-# voronoi zones
-voronoi1_zones <- terra::rasterize(
-  x = towers1_catchment %>% 
-    st_transform(crs = crs(mastergrid)) %>% vect(),
-  y = rast(mastergrid),
-  field = "tower_id",
-  background = NA
-)
-
-voronoi2_zones <- terra::rasterize(
-  x = towers2_catchment %>% 
-    st_transform(crs = crs(mastergrid)) %>% vect(),
-  y = rast(mastergrid),
-  field = "tower_id",
-  background = NA
-)
-
-# subscriber spatial redistribution factors
-mask1 <- rast(mastergrid)
-for(tower_id in unique(sort(towers1_catchment$tower_id))){
-  values <- as.vector(mask[voronoi1_zones == tower_id])
-  denom <- sum(values, na.rm=T)
-  mask1[voronoi1_zones == tower_id] <- values / denom
-  # check: sum(mask1[voronoi1_zones == tower_id], na.rm=T) == 1
-}
-
-mask2 <- rast(mastergrid)
-for(tower_id in unique(sort(towers2_catchment$tower_id))){
-  values <- as.vector(mask[voronoi2_zones == tower_id])
-  denom <- sum(values, na.rm=T)
-  mask2[voronoi2_zones == tower_id] <- values / denom
-  # check: sum(mask2[voronoi2_zones == tower_id], na.rm=T) == 1
-}
-
-plot(mask1)
-plot(mask2)
 
 # rasterise total subscribers per zone
 subscribers1_per_zone <- terra::rasterize(
-  x = towers1_catchment %>% 
-    st_transform(crs = crs(mastergrid)) %>% vect(),
+  x = towers1_catchment %>%
+    st_transform(crs = crs(mastergrid)) %>%
+    vect(),
   y = rast(mastergrid),
   field = "subscribers",
   background = NA
 )
 
 subscribers2_per_zone <- terra::rasterize(
-  x = towers2_catchment %>% 
-    st_transform(crs = crs(mastergrid)) %>% vect(),
+  x = towers2_catchment %>%
+    st_transform(crs = crs(mastergrid)) %>%
+    vect(),
   y = rast(mastergrid),
   field = "subscribers",
   background = NA
 )
+
+# subscriber spatial redistribution factors (mask values rescaled to sum to 1 within zones)
+mask1 <- rast(mastergrid)
+for (tower_id in unique(sort(towers1_catchment$tower_id))) {
+  values <- as.vector(mask[towers1_zones == tower_id])
+  denom <- sum(values, na.rm = T)
+  mask1[towers1_zones == tower_id] <- values / denom
+  # check: sum(mask1[voronoi1_zones == tower_id], na.rm=T) == 1
+}
+
+mask2 <- rast(mastergrid)
+for (tower_id in unique(sort(towers2_catchment$tower_id))) {
+  values <- as.vector(mask[towers2_zones == tower_id])
+  denom <- sum(values, na.rm = T)
+  mask2[towers2_zones == tower_id] <- values / denom
+  # check: sum(mask2[voronoi2_zones == tower_id], na.rm=T) == 1
+}
+
+plot(mask1)
+plot(mask2)
 
 # subscriber rasters
 subscribers1 <- subscribers1_per_zone * mask1
@@ -315,20 +319,33 @@ writeRaster(
 
 #---- population estimation ----#
 
-# sum subscribers across providers
-subscribers1[is.na(subscribers1)] <- 0
-subscribers2[is.na(subscribers2)] <- 0
-
-subscribers <- subscribers1 + subscribers2
-subscribers[subscribers == 0] <- NA
-
-plot(subscribers)
+# penetration rates
+penetration1 <- sum(values(subscribers1), na.rm = T) / 2.1e6
+penetration2 <- sum(values(subscribers2), na.rm = T) / 2.1e6
 
 # population
-penetration <- sum(as.vector(subscribers), na.rm=T) / 2.1e6
+population <- mastergrid
+population[mastergrid == 1] <- NA
 
-population <- subscribers / penetration
+# # coverage: neither provider
+# idx <- is.na(subscribers1) & is.na(subscribers2) & mastergrid == 1
+# population[idx] <- 0
 
+# coverage: only provider 1
+idx <- !is.na(subscribers1) & is.na(subscribers2)
+population[idx] <- subscribers1[idx] / penetration1
+
+# coverage: only provider 2
+idx <- is.na(subscribers1) & !is.na(subscribers2)
+population[idx] <- subscribers2[idx] / penetration2
+
+# coverage: both providers
+idx <- !is.na(subscribers1) & !is.na(subscribers2)
+population[idx] <- (subscribers1[idx] + subscribers2[idx]) /
+  (penetration1 + penetration2)
+
+# rescale to 2.1e6 total population
+population = population * (2.1e6 / sum(values(population), na.rm = T))
 plot(population)
 
-writeRaster(population, file.path(out_dir, "population.tif"), overwrite=TRUE)
+writeRaster(population, file.path(out_dir, "population.tif"), overwrite = TRUE)
