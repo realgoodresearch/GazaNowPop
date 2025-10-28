@@ -3,8 +3,8 @@ rm(list = ls())
 gc()
 
 #---- USER OPTIONS ----#
-baseline_date <- "2025-09-29"
-reference_date <- "2025-10-19"
+baseline_date <- "2025-10-19"
+reference_date <- "2025-10-22"
 #----------------------#
 
 # load libraries
@@ -68,20 +68,20 @@ nbr_geo <- st_read(file.path(data_dir, "nbr_geo.gpkg"))
 
 #---- population change ----#
 write(
-  "Estimates of population change were calculated for the reference date relative to the baseline date defined below.\n", 
+  "Estimates of population change were calculated for the reference date relative to the baseline date defined below.\n",
   file.path(out_dir, "README.txt")
 )
 
 write(
-  paste("Reference date:", reference_date), 
-  file.path(out_dir, "README.txt"), 
-  append=TRUE
+  paste("Reference date:", reference_date),
+  file.path(out_dir, "README.txt"),
+  append = TRUE
 )
 
 write(
-  paste("Baseline date:", baseline_date), 
-  file.path(out_dir, "README.txt"), 
-  append=TRUE
+  paste("Baseline date:", baseline_date),
+  file.path(out_dir, "README.txt"),
+  append = TRUE
 )
 
 

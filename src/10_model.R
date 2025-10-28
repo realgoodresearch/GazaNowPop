@@ -4,7 +4,7 @@ gc()
 
 #---- USER OPTIONS ----#
 binary_bldg_mask <- FALSE
-reference_date <- "2025-10-19"
+reference_date <- "2025-10-22"
 max_tower_radius <- 2 # max tower radius (km)
 #----------------------#
 
