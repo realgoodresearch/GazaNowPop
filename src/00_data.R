@@ -28,6 +28,8 @@ out_dir <- file.path(getwd(), "out", "data")
 dir.create(out_dir, showWarnings = F, recursive = T)
 
 #---- load data ----#
+telecoms <- read.csv(file.path(in_dir, "telecoms", "telecoms_20251029.csv"))
+
 gov_geo <- st_read(file.path(
   in_dir,
   "admin_boundaries",
@@ -49,8 +51,6 @@ nbr_geo <- st_read(file.path(
   "Neighbourhoods",
   "Neighbourhoods_Population_polygons.shp"
 ))
-
-telecoms <- read.csv(file.path(in_dir, "telecoms", "telecoms_20251024.csv"))
 
 bldgs <- st_read(file.path(in_dir, "osm_buildings", "osm_buildings_gaza.gpkg"))
 
