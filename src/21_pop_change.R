@@ -3,8 +3,8 @@ rm(list = ls())
 gc()
 
 #---- USER OPTIONS ----#
-baseline_date <- "2025-10-19"
-reference_date <- "2025-10-22"
+baseline_date <- "2025-09-29"
+reference_date <- "2025-10-26"
 #----------------------#
 
 # load libraries
