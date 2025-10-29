@@ -4,6 +4,8 @@ gc()
 
 #---- USER OPTIONS ----#
 grid_size <- 100
+tower_radius_neighbours <- 3
+tower_radius_scaling <- 1
 #----------------------#
 
 # load libraries
@@ -12,7 +14,7 @@ library(terra)
 library(sf)
 
 # encoding for Arabic
-Sys.setlocale("LC_ALL", "en_US.UTF-8")
+Sys.setlocale("LC_ALL", "en_US.UTF-8") # Adjust for your OS
 
 # load environment
 env <- new.env()
@@ -27,9 +29,7 @@ src_dir <- file.path(here::here(), "src")
 out_dir <- file.path(getwd(), "out", "data")
 dir.create(out_dir, showWarnings = F, recursive = T)
 
-#---- load data ----#
-telecoms <- read.csv(file.path(in_dir, "telecoms", "telecoms_20251029.csv"))
-
+# load data
 gov_geo <- st_read(file.path(
   in_dir,
   "admin_boundaries",
@@ -52,6 +52,8 @@ nbr_geo <- st_read(file.path(
   "Neighbourhoods_Population_polygons.shp"
 ))
 
+telecoms <- read.csv(file.path(in_dir, "telecoms", "telecoms_20251022.csv"))
+
 bldgs <- st_read(file.path(in_dir, "osm_buildings", "osm_buildings_gaza.gpkg"))
 
 evac <- read.csv(file.path(
@@ -71,8 +73,6 @@ for (f in lf) {
   date <- sub("^.*_(.*)\\.gpkg$", "\\1", f)
   evac_buffers[[date]] <- st_read(file.path("in", "evacuation_buffers", f))
 }
-
-#-----------------#
 
 # mastergrid
 template <- rast(
@@ -176,8 +176,7 @@ telecoms <- telecoms |>
       provider == "P2" ~ 2
     ),
     date = as.Date(date, format = "%m/%d/%Y")
-  ) %>%
-  filter(latitude < 31.6 & longitude < 34.57) # select inside Gaza
+  )
 
 # towers
 towers1_geo <- telecoms |>
@@ -212,7 +211,7 @@ telco1 <- telecoms |>
     subscribers = number_of_subscriptions
   ) |>
   arrange(provider, date, tower_id) |>
-  select(provider, tower_id, longitude, latitude, date, subscribers)
+  select(provider, tower_id, date, subscribers)
 
 telco2 <- telecoms |>
   filter(provider == 2) |>
@@ -226,11 +225,88 @@ telco2 <- telecoms |>
     subscribers = number_of_subscriptions
   ) |>
   arrange(provider, date, tower_id) |>
-  select(provider, tower_id, longitude, latitude, date, subscribers)
+  select(provider, tower_id, date, subscribers)
 
 write.csv(telco1, file.path(out_dir, "telco1.csv"), row.names = FALSE)
 write.csv(telco2, file.path(out_dir, "telco2.csv"), row.names = FALSE)
 
+# join telco subscribers (latest date) to towers
+date_latest <- max(telco1$date)
+telco1_latest <- merge(
+  x = towers1_geo,
+  y = telco1 |> filter(date == date_latest),
+  by.x = "id",
+  by.y = "tower_id"
+)
+
+date_latest <- max(telco2$date)
+telco2_latest <- merge(
+  x = towers2_geo,
+  y = telco2 |> filter(date == date_latest),
+  by.x = "id",
+  by.y = "tower_id"
+)
+
+st_write(
+  telco1_latest,
+  file.path(out_dir, "telco1_towers1.gpkg"),
+  append = FALSE
+)
+st_write(
+  telco2_latest,
+  file.path(out_dir, "telco2_towers2.gpkg"),
+  append = FALSE
+)
+
+
+#---- tower-to-pixel distances ----#
+
+grid_coords <- as.data.frame(mastergrid, xy = TRUE)[, c("x", "y")]
+
+towers1_coords <- vect(towers1_geo) |>
+  project(mastergrid) |>
+  as.data.frame(geom = "XY") |>
+  select(x, y)
+
+d1 <- distance(towers1_coords, grid_coords)
+rownames(d1) <- towers1_geo$id
+colnames(d1) <- 1:ncol(d1)
+
+towers2_coords <- vect(towers2_geo) |>
+  project(mastergrid) |>
+  as.data.frame(geom = "XY") |>
+  select(x, y)
+
+d2 <- distance(towers2_coords, grid_coords)
+rownames(d2) <- towers2_geo$id
+colnames(d2) <- 1:ncol(d2)
+
+# save to disk
+saveRDS(d1, file.path(out_dir, "distance1.rds"))
+saveRDS(d2, file.path(out_dir, "distance2.rds"))
+
+
+#--- tower coverage radii ----#
+towers1_dist <- as.matrix(dist(towers1_coords))
+towers1_spacing <- c()
+for (j in 1:nrow(towers1_coords)) {
+  j_dist <- towers1_dist[j, -j]
+  towers1_spacing[j] <- mean(sort(j_dist)[1:tower_radius_neighbours]) *
+    tower_radius_scaling
+}
+names(towers1_spacing) <- towers1_geo$id
+
+towers2_dist <- as.matrix(dist(towers2_coords))
+towers2_spacing <- c()
+for (j in 1:nrow(towers2_coords)) {
+  j_dist <- towers2_dist[j, -j]
+  towers2_spacing[j] <- mean(sort(j_dist)[1:tower_radius_neighbours]) *
+    tower_radius_scaling
+}
+names(towers2_spacing) <- towers2_geo$id
+
+saveRDS(towers1_spacing, file.path(out_dir, "radius1.rds"))
+saveRDS(towers2_spacing, file.path(out_dir, "radius2.rds"))
 
 #---- OSM buildings ----#
 
