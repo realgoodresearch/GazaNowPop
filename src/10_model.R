@@ -4,7 +4,7 @@ gc()
 
 #---- USER OPTIONS ----#
 binary_bldg_mask <- FALSE
-reference_date <- "2025-10-26"
+reference_date <- "2025-11-02"
 max_tower_radius <- 2 # max tower radius (km)
 #----------------------#
 
@@ -63,6 +63,11 @@ for (f in lf) {
   date <- sub("^.*_(.*)\\.tif$", "\\1", f)
   evac_buffers[[date]] <- rast(file.path(data_dir, "evacuation_buffers", f))
 }
+
+bldg_destroyed <- rast(file.path(data_dir, "bldg_destroyed.tif"))
+housing <- rast(file.path(data_dir, "housing.tif"))
+housing_prop <- rast(file.path(data_dir, "housing_proportion_undamaged.tif"))
+tents <- rast(file.path(data_dir, "tents.tif"))
 
 #---- telecoms ----#
 
@@ -170,6 +175,9 @@ towers2_buff_voronoi <- intersect_voronoi_buffer(
   towers2_buffer
 )
 
+plot(towers1_buff_voronoi %>% select(tower_id))
+plot(towers1_buff_voronoi %>% select(tower_id))
+
 st_write(
   towers1_buff_voronoi,
   file.path(out_dir, "towers1_buff_voronoi.gpkg"),
@@ -184,11 +192,59 @@ st_write(
 
 #---- mask ----#
 
-# building cover raster
+# create initial building cover raster
 bldg_ras <- bldg_cover
 if (binary_bldg_mask) {
   bldg_ras[bldg_ras > 0] <- 1
 }
+
+# NAs to zero for building cover raster
+bldg_ras <- ifel(mastergrid == 1 & is.na(bldg_ras), 0, bldg_ras)
+
+# assume 100% of housing remaining in OSM buildings where UNOSAT did not assess damage
+housing_prop <- ifel(
+  mastergrid == 1 & is.na(housing_prop) & bldg_ras > 0,
+  1,
+  housing_prop
+)
+
+# NAs to zero for housing proportion raster
+housing_prop <- ifel(mastergrid == 1 & is.na(housing_prop), 0, housing_prop)
+
+# reduce building coverage proportional to proportion of housing units remaining undamaged
+bldg_ras <- bldg_ras * housing_prop
+
+# add 10% of tent coverage to building coverage
+# NOTE: Building coverage is footprints that do not account for multi-story buildings.
+# NOTE: Tent coverage is extent of areas with tents, so includes ground area between tents.
+# NOTE: 10% is rough adjustment for this difference.
+tents <- ifel(mastergrid == 1 & is.na(tents), 0, tents)
+bldg_ras <- bldg_ras + (tents * 0.1)
+plot(bldg_ras)
+
+
+# average building destruction within 500 m focal window
+bldg_destroyed_focal <- focal(
+  x = bldg_destroyed %>% project(mastergrid),
+  w = focalMat(mastergrid, d = 500, type = "circle"),
+  fun = mean,
+  na.rm = TRUE
+)
+
+# average proportion of housing units remaining within 500 m focal window
+housing_prop_focal <- focal(
+  x = housing_prop %>% project(mastergrid),
+  w = focalMat(mastergrid, d = 500, type = "circle"),
+  fun = mean,
+  na.rm = TRUE
+)
+
+# remove buildings for large areas of destroyed buildings where there are no tents
+bldg_ras <- ifel(
+  (bldg_destroyed_focal > 0.9 | housing_prop_focal < 0.1) & tents == 0,
+  0,
+  bldg_ras
+)
 plot(bldg_ras)
 
 # building mask
@@ -207,7 +263,7 @@ mask <- build_mask(
   bldg_mask = bldg_mask,
   mastergrid = mastergrid
 )
-
+plot(mask)
 writeRaster(mask, file.path(out_dir, "mask.tif"), overwrite = TRUE)
 
 
@@ -284,7 +340,7 @@ for (tower_id in unique(sort(towers1_catchment$tower_id))) {
   values <- as.vector(mask[towers1_zones == tower_id])
   denom <- sum(values, na.rm = T)
   mask1[towers1_zones == tower_id] <- values / denom
-  # check: sum(mask1[voronoi1_zones == tower_id], na.rm=T) == 1
+  # check: sum(mask1[towers1_zones == tower_id], na.rm=T) == 1
 }
 
 mask2 <- rast(mastergrid)
@@ -292,7 +348,7 @@ for (tower_id in unique(sort(towers2_catchment$tower_id))) {
   values <- as.vector(mask[towers2_zones == tower_id])
   denom <- sum(values, na.rm = T)
   mask2[towers2_zones == tower_id] <- values / denom
-  # check: sum(mask2[voronoi2_zones == tower_id], na.rm=T) == 1
+  # check: sum(mask2[towers2_zones == tower_id], na.rm=T) == 1
 }
 
 plot(mask1)
