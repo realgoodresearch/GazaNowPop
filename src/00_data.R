@@ -72,6 +72,32 @@ for (f in lf) {
   evac_buffers[[date]] <- st_read(file.path("in", "evacuation_buffers", f))
 }
 
+st_layers(
+  file.path(
+    in_dir,
+    "unosat",
+    "OCHA-CBPF-OPT-031_UNOSAT_Gaza_Strip_CDA_11October2025_GDB_HU",
+    "UNOSAT_GazaStrip_CDA_11October2025_HU.gdb"
+  )
+)
+bldg_damage <- st_read(
+  file.path(
+    in_dir,
+    "unosat",
+    "OCHA-CBPF-OPT-031_UNOSAT_Gaza_Strip_CDA_11October2025_GDB_HU",
+    "UNOSAT_GazaStrip_CDA_11October2025_HU.gdb"
+  ),
+  layer = "Damage_Sites_GazaStrip_20251011_HU"
+)
+
+tents_extent <- st_read(
+  file.path(
+    in_dir,
+    "tents",
+    "tents_extent_no_bldgs_with_holes_20251014.gpkg"
+  )
+)
+
 #-----------------#
 
 # mastergrid
@@ -83,6 +109,7 @@ template <- rast(
 
 gov_geo$AOI <- 1
 mastergrid <- rasterize(vect(gov_geo), template, field = "AOI")
+names(mastergrid) <- "mastergrid"
 
 plot(mastergrid)
 
@@ -306,3 +333,94 @@ for (d in dates) {
     overwrite = T
   )
 }
+
+#---- building damage ----#
+
+# undamaged housing units
+bldg_damage <- bldg_damage %>%
+  mutate(
+    HU_undamaged_14 = HU_tot - HU_damaged_14,
+    HU_undamaged_prop_14 = HU_undamaged_14 / HU_tot
+  )
+
+housing <- rasterize(
+  x = vect(bldg_damage) %>% project(mastergrid),
+  y = mastergrid,
+  field = "HU_undamaged_14",
+  fun = sum,
+  na.rm = TRUE
+)
+names(housing) <- "housing"
+
+housing
+plot(housing)
+
+writeRaster(
+  housing,
+  file.path(out_dir, "housing.tif"),
+  overwrite = TRUE
+)
+
+
+housing_prop <- rasterize(
+  x = vect(bldg_damage) %>% project(mastergrid),
+  y = mastergrid,
+  field = "HU_undamaged_prop_14",
+  fun = mean,
+  na.rm = TRUE
+)
+names(housing_prop) <- "housing_proportion_undamaged"
+
+housing_prop
+plot(housing_prop)
+
+writeRaster(
+  housing_prop,
+  file.path(out_dir, "housing_proportion_undamaged.tif"),
+  overwrite = TRUE
+)
+
+
+# proportion destroyed or severely damaged buildings
+bldg_damage <- bldg_damage %>%
+  mutate(
+    destroyed_or_severely_damaged_14 = ifelse(
+      Main_Damage_Site_Class_14 %in% 1:2,
+      1,
+      0
+    )
+  )
+
+bldg_destroyed <- rasterize(
+  x = vect(bldg_damage) %>% project(mastergrid),
+  y = mastergrid,
+  field = "destroyed_or_severely_damaged_14",
+  fun = mean,
+  na.rm = TRUE
+)
+names(bldg_destroyed) <- "bldg_destroyed"
+
+bldg_destroyed
+plot(bldg_destroyed > 0.9)
+
+writeRaster(
+  bldg_destroyed,
+  file.path(out_dir, "bldg_destroyed.tif"),
+  overwrite = TRUE
+)
+
+
+# tents extent
+tents <- terra::rasterize(
+  x = vect(tents_extent) %>%
+    project(mastergrid),
+  y = mastergrid,
+  cover = TRUE
+)
+plot(tents)
+
+writeRaster(
+  tents,
+  filename = file.path(out_dir, "tents.tif"),
+  overwrite = TRUE
+)
