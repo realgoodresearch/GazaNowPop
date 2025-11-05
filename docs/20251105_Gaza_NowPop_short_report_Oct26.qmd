@@ -1,0 +1,348 @@
+---
+title: "Revision of population nowcasting for the Gaza Strip using telecommunications data from October 26, 2025"
+author: Douglas R. Leasure\footnote{Director and Research Data Scientist at Real Good Research Ltd. (https://realgoodresearch.com), and Senior Researcher at the Demographic Science Unit, Nuffield Department of Population Health, University of Oxford.}
+date: "5 November 2025"
+format: 
+    pdf:
+        number-sections: false
+        toc: false
+        toc-depth: 3
+        latex-engine: xelatex
+fontfamily: roboto
+fontsize: 12pt
+geometry: a4paper
+output: pdf_document
+---
+
+**Classification:** Strictly Confidential\footnote{See UNOCHA (2024) Information Sharing Protocol for the Occupied Palestinian Territory, available from https://www.unocha.org/publications/report/occupied-palestinian-territory/information-sharing-protocol-occupied-palestinian-territory-june-2024}  
+
+**Sensitivity:** Severe Sensitivity  
+
+**Suggested Citation:** Leasure DR. 2025. Revision of population nowcasting for the Gaza Strip using telecommunications data from Oct 26, 2025. Published November 5, 2025.
+
+\vfill
+*While every effort was given to produce data suitable for operational purposes, the results are provided "as is" without warranty of any kind. In no event shall the authors or copyright holders be liable for any claim, damages or other liability arising from, out of or in connection with the contents of this report, supplementary data, or source code.*
+
+\newpage
+
+\hypersetup{linkcolor=black}
+<!-- \setcounter{tocdepth}{3}
+\tableofcontents -->
+
+
+```{r}
+#| include: false
+
+options(scipen = 999)
+
+# libraries
+library(dplyr)
+library(knitr)
+library(kableExtra)
+
+#---- USER OPTIONS ----#
+pop_date <- as.Date("2025-10-26")
+#----------------------#
+
+# directories
+data_dir <- file.path("wd", "out", "results", pop_date, "supplementary_data")
+
+if (!dir.exists(data_dir)) {
+  data_dir <- file.path("..", data_dir)
+}
+
+# load data
+pop_gov <- read.csv(file.path(
+  data_dir,
+  paste0("pop_gov_", pop_date, ".csv")
+))
+pop_mun <- read.csv(file.path(
+  data_dir,
+  paste0("pop_mun_", pop_date, ".csv")
+))
+pop_nbr <- read.csv(file.path(
+  data_dir,
+  paste0("pop_nbr_", pop_date, ".csv")
+))
+
+pop_change_gov <- read.csv(file.path(
+  file.path(data_dir, "pop_change"),
+  paste0("pop_change_gov_", pop_date, ".csv")
+))
+pop_change_mun <- read.csv(file.path(
+  file.path(data_dir, "pop_change"),
+  paste0("pop_change_mun_", pop_date, ".csv")
+))
+pop_change_nbr <- read.csv(file.path(
+  file.path(data_dir, "pop_change"),
+  paste0("pop_change_nbr_", pop_date, ".csv")
+))
+```
+
+
+\newpage
+
+# Summary  
+
+This report provides a revision to population estimates for 26 October 2025 that have been produced from counts of active subscribers assigned to geolocated telecommunications towers for two mobile network operators, including over 1.2 million subscribers. The revision incorporated feedback from field staff on the ground in Gaza, including their own rough estimates of population sizes for some neighbourhoods. Reviewing the feedback helped identify two primary areas for improvement of population estimates that were addressed in this revision:  (1) Accounting for populations avoiding areas with many destroyed buildings, and (2) accounting for populations in areas with tents but no buildings. The revised methodology incorporated UNOSAT's latest building damage assessment and a manually drawn map of tents based on satellite imagery from Oct 14.
+
+Population estimates were produced on a 100-m grid, assuming a total population of 2.1 million people in the Gaza strip, and then aggregated to neighbourhoods, municipalities, and governorates. Population changes were estimated for each area relative to comparable population estimates from September 29 which provided a baseline prior to the ceasfire that began on October 10. Note that baseline population estimates for September 29 were also revised for consistency in methodology to estimate population change.
+
+On October 26, Gaza and North Gaza governorates were estimated to have `r pop_gov %>% filter(ADM2_PCODE %in% c(255,260)) %>% pull(population) %>% sum() %>% round() %>% prettyNum(big.mark=",")` people, Deir al Balah had `r pop_gov %>% filter(ADM2_PCODE==265) %>% pull(population) %>% round() %>% prettyNum(big.mark=",")`, and Khan Younis and Rafah had `r pop_gov %>% filter(ADM2_PCODE %in% c(270,275)) %>% pull(population) %>% sum() %>% round() %>% prettyNum(big.mark=",")`. See the report below for population estimates in municipalities and neighbourhoods.
+
+Estimates of population change since September 29 indicated that the population of Deir al Balah governorate decreased by `r pop_change_gov %>% filter(ADM2_PCODE==265) %>% pull(population) %>% round() %>% prettyNum(big.mark=",")` and the population of Khan Younis governorate decreased by `r pop_change_gov %>% filter(ADM2_PCODE==270) %>% pull(population) %>% round() %>% prettyNum(big.mark=",")` people. In Deir al Balah governorate, the largest decreases were from the neighbourhoods of An Nuseirat (`r pop_change_nbr %>% filter(ADM4_PCODE==26501147) %>% pull(population) %>% round() %>% prettyNum(big.mark=",")`), Deir al Balah (south) (`r pop_change_nbr %>% filter(ADM4_PCODE==26510152) %>% pull(population) %>% round() %>% prettyNum(big.mark=",")`), and As Sahabah (`r pop_change_nbr %>% filter(ADM4_PCODE==2650577) %>% pull(population) %>% round() %>% prettyNum(big.mark=",")`). In Khan Younis governorate, the Al Mawasi neighbourhood decreased by `r pop_change_nbr %>% filter(ADM4_PCODE==27002154) %>% pull(population) %>% round() %>% prettyNum(big.mark=",")` people while Khan Younis Camp increased by `r pop_change_nbr %>% filter(ADM4_PCODE==27003176) %>% pull(population) %>% round() %>% prettyNum(big.mark=",")`. 
+
+The northern governorates of Gaza and North Gaza increased by `r pop_change_gov %>% filter(ADM2_PCODE %in% c(255,260)) %>% pull(population) %>% sum() %>% round() %>% prettyNum(big.mark=",")` people over this time period. Gaza municipality increased by `r pop_change_mun %>% filter(ADM3_PCODE == 26001) %>% pull(population) %>% round() %>% prettyNum(big.mark=",")` with most of that increase in the neighbourhoods of Northern Remel (`r pop_change_nbr %>% filter(ADM4_PCODE==2600118) %>% pull(population) %>% round() %>% prettyNum(big.mark=",")`), Southern Remel (`r pop_change_nbr %>% filter(ADM4_PCODE==2600119) %>% pull(population) %>% round() %>% prettyNum(big.mark=",")`), and An Naser (`r pop_change_nbr %>% filter(ADM4_PCODE==2600123) %>% pull(population) %>% round() %>% prettyNum(big.mark=",")`).
+
+*Methodology.* The method approximated the coverage area for each telecommunications tower assuming subscribers were assigned to the nearest tower within 2 km. Total population for each 100-m grid cell was extrapolated from subscriber counts by estimating the penetration rate for each mobile network operator. Population estimates were mapped into the locations of buildings and tents after excluding destroyed or severely damaged buildings. Populations were assumed to be zero for grid cells outside the coverage area of both telecommunications providers, for grid cells with active evacuation orders, and for areas behind the "yellow line" militarised area along the Gaza border. Because evacuation zones may have small populations remaining, we report those populations as "<100" or "<500" (less than 100 or less than 500 people). This methodology cannot produce quantitative measures of accuracy at any spatial scale due to lack of ground-truth validation data, so triangulation with multiple data sources is encouraged.  
+
+\newpage
+# Population estimation
+```{r}
+#| echo: false
+#| label: fig-pop-grid
+#| fig-cap: "Population estimates for every 100-m grid cell."
+#| fig-width: 6
+#| out.width: "70%"
+#| fig-align: center
+knitr::include_graphics(file.path(
+  data_dir,
+  paste0("fig_pop_grid_", pop_date, ".jpg")
+))
+```
+
+```{r}
+#| echo: false
+#| label: fig-pop-nbr
+#| fig-cap: "Gridded population estimates aggregated to neighborhoods."
+#| fig-width: 6
+#| out.width: "70%"
+#| fig-align: center
+knitr::include_graphics(file.path(
+  data_dir,
+  paste0("fig_pop_nbr_", pop_date, ".jpg")
+))
+```
+
+
+\newpage
+## Governorate-level
+```{r}
+#| echo: false
+#| results: asis
+
+pop_gov |>
+  arrange(ADM2_PCODE) |>
+  select(ADM2_EN, population) |>
+  rename(
+    Governorate = ADM2_EN,
+    Population = population
+  ) |>
+  mutate(
+    Population = case_when(
+      Population > 500 ~ prettyNum(round(Population), big.mark = ","),
+      Population >= 100 & Population < 500 ~ "<500",
+      Population < 100 ~ "<100"
+    )
+  ) |>
+  kable(
+    caption = paste0(
+      "Population estimates for each governorate on ",
+      format(pop_date, "%d %B %Y"),
+      ". {#tbl-pop-gov}"
+    ),
+    booktabs = TRUE
+  )
+```
+
+## Municipality-level
+```{r}
+#| echo: false
+#| results: asis
+
+pop_mun |>
+  arrange(ADM2_PCODE, ADM3_PCODE) |>
+  select(ADM3_EN, ADM2_EN, population) |>
+  rename(
+    Governorate = ADM2_EN,
+    Municipality = ADM3_EN,
+    Population = population
+  ) |>
+  mutate(
+    Population = case_when(
+      Population > 500 ~ prettyNum(round(Population), big.mark = ","),
+      Population >= 100 & Population < 500 ~ "<500",
+      Population < 100 ~ "<100"
+    )
+  ) |>
+  kable(
+    caption = paste0(
+      "Population estimates for each municipality on ",
+      format(pop_date, "%d %B %Y"),
+      ". {label: tbl-pop-mun}"
+    ),
+    booktabs = TRUE
+  )
+```
+
+## Neighbourhood-level
+```{r}
+#| echo: false
+#| results: asis
+
+pop_nbr |>
+  arrange(ADM2_PCODE, ADM3_PCODE, ADM4_PCODE) |>
+  select(ADM4_EN, ADM3_EN, ADM2_EN, population) |>
+  rename(
+    Governorate = ADM2_EN,
+    Municipality = ADM3_EN,
+    Neighbourhood = ADM4_EN,
+    Population = population
+  ) |>
+  mutate(
+    Population = case_when(
+      Population > 500 ~ prettyNum(round(Population), big.mark = ","),
+      Population >= 100 & Population < 500 ~ "<500",
+      Population < 100 ~ "<100"
+    ),
+    Municipality = case_when(
+      nchar(Municipality) > 12 ~ paste0(substr(Municipality, 1, 12), "..."),
+      TRUE ~ Municipality
+    )
+  ) |>
+  kable(
+    caption = paste0(
+      "Population estimates for each neighbourhood on ",
+      format(pop_date, "%d %B %Y"),
+      ". {label: tbl-pop-nbr}"
+    ),
+    booktabs = TRUE
+  )
+```
+
+\newpage 
+# Population change (29 September to 26 October 2025)
+```{r}
+#| echo: false
+#| label: fig-pop-change
+#| fig-cap: "Change in population for every 100-m grid cell from 29 September to 26 October 2025."
+#| fig-width: 6
+#| out.width: "70%"
+#| fig-align: center
+knitr::include_graphics(file.path(
+  data_dir,
+  paste0("fig_pop_change_", pop_date, ".jpg")
+))
+```
+
+\newpage
+## Governorate-level
+```{r}
+#| echo: false
+#| results: asis
+
+pop_change_gov |>
+  arrange(ADM2_PCODE) |>
+  select(ADM2_EN, population) |>
+  rename(
+    Governorate = ADM2_EN,
+    Population_Change = population
+  ) |>
+  mutate(
+    Population_Change = prettyNum(round(Population_Change), big.mark = ",")
+  ) |>
+  kable(
+    caption = paste0(
+      "Estimates of population change for each governorate on ",
+      format(pop_date, "%d %B %Y"),
+      ". {#tbl-pop-change-gov}"
+    ),
+    booktabs = TRUE
+  )
+```
+
+## Municipality-level
+```{r}
+#| echo: false
+#| results: asis
+
+pop_change_mun |>
+  arrange(ADM2_PCODE, ADM3_PCODE) |>
+  select(ADM3_EN, ADM2_EN, population) |>
+  rename(
+    Governorate = ADM2_EN,
+    Municipality = ADM3_EN,
+    Population_Change = population
+  ) |>
+  mutate(
+    Population_Change = prettyNum(round(Population_Change), big.mark = ",")
+  ) |>
+  kable(
+    caption = paste0(
+      "Estimates of population change for each municipality on ",
+      format(pop_date, "%d %B %Y"),
+      ". {label: tbl-pop-mun}"
+    ),
+    booktabs = TRUE
+  )
+```
+
+## Neighbourhood-level
+```{r}
+#| echo: false
+#| results: asis
+
+pop_change_nbr |>
+  arrange(ADM2_PCODE, ADM3_PCODE, ADM4_PCODE) |>
+  select(ADM4_EN, ADM3_EN, ADM2_EN, population) |>
+  rename(
+    Governorate = ADM2_EN,
+    Municipality = ADM3_EN,
+    Neighbourhood = ADM4_EN,
+    Pop_Change = population
+  ) |>
+  mutate(
+    Pop_Change = prettyNum(round(Pop_Change), big.mark = ","),
+    Municipality = case_when(
+      nchar(Municipality) > 12 ~ paste0(substr(Municipality, 1, 12), "..."),
+      TRUE ~ Municipality
+    )
+  ) |>
+  kable(
+    caption = paste0(
+      "Estimates of population change for each neighbourhood on ",
+      format(pop_date, "%d %B %Y"),
+      ". {label: tbl-pop-nbr}"
+    ),
+    booktabs = TRUE
+  )
+```
+
+
+\newpage
+# Supplementary Data
+
+The following supplementary data accompany this report and are available upon request to UNOCHA through the Assessment and Information Management (AIM) Working Group:  
+
+1. pop_grid_[date].tif - 100-m gridded population estimates in geotiff format.  
+2. pop_nbr_[date].csv - Neighbourhood-level population estimates in csv format.  
+3. pop_mun_[date].csv - Municipality-level population estimates in csv format.  
+4. pop_gov_[date].csv - Governorate-level population estimates in csv format.  
+5. pop_nbr_[date].gpkg - Neighbourhood-level population estimates in geopackage format to include spatial geometries defining neighbourhood boundaries.  
+6. pop_mun_[date].gpkg - Municipality-level population estimates in geopackage format to include spatial geometries defining municipality boundaries.  
+7. pop_gov_[date].gpkg - Governorate-level population estimates in geopackage format to include spatial geometries defining governorate boundaries.  
+
+
+8. ./pop_change/README.txt - Definition of the dates used to calculate population change.
+9. ./pop_change/pop_grid_change_[date].tif - 100-m gridded estimates of population change in geotiff format.  
+10. ./pop_change/pop_change_nbr_[date].csv - Neighbourhood-level estimates of population change in csv format.  
+11. ./pop_change/pop_change_mun_[date].csv - Municipality-level estimates of population change in csv format.  
+12. ./pop_change/pop_change_gov_[date].csv - Governorate-level estimates of population change in csv format.  
+13. ./pop_change/pop_change_nbr_[date].gpkg - Neighbourhood-level estimates of population change in geopackage format to include spatial geometries defining neighbourhood boundaries.  
+14. ./pop_change/pop_change_mun_[date].gpkg - Municipality-level estimates of population change in geopackage format to include spatial geometries defining municipality boundaries.  
+15. ./pop_change/pop_change_gov_[date].gpkg - Governorate-level estimates of population change in geopackage format to include spatial geometries defining governorate boundaries.  
+
+
+16. fig_pop_grid_[date].jpg - A map of gridded population estimates (@fig-pop-grid) in JPEG format.  
+17. fig_pop_nbr_[date].jpg - A map of neighborhood-level population estimates (@fig-pop-nbr) in JPEG format.  
+18. fig_pop_grid_change_[date].jpg - A map of gridded estimates of population change (@fig-pop-nbr) in JPEG format.  
