@@ -73,7 +73,10 @@ sum(val_result$population_validation_scaled)
 val_result <- val_result %>%
   mutate(
     population_diff = population - population_validation,
-    population_diff_scaled = population - population_validation_scaled
+    population_perc_diff = population_diff / population_validation,
+    population_diff_scaled = population - population_validation_scaled,
+    population_perc_diff_scaled = population_diff_scaled /
+      population_validation_scaled
   )
 
 # save to disk
