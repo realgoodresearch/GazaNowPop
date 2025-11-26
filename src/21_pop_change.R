@@ -4,7 +4,8 @@ gc()
 
 #---- USER OPTIONS ----#
 baseline_date <- "2025-09-29"
-reference_date <- "2025-11-05"
+baseline_date <- "2025-11-16"
+reference_date <- "2025-11-23"
 #----------------------#
 
 # load libraries
@@ -31,7 +32,7 @@ out_dir <- file.path(
   results_dir,
   reference_date,
   "supplementary_data",
-  "pop_change"
+  paste0("pop_change_", gsub('-', '', baseline_date))
 )
 dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 
