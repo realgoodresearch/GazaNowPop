@@ -6,6 +6,7 @@ out/
 *.exe
 *.env
 /docs/*.pdf
+/docs/*.html
 
 # History files
 .Rhistory
