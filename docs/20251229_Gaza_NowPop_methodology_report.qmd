@@ -1,0 +1,332 @@
+---
+title-block: false
+title: ""
+author: "" 
+date: ""
+format: 
+    html:
+      self-contained: true
+      toc: true
+      toc-depth: 3
+      theme: cosmo
+      code-fold: true
+fontfamily: roboto
+fontsize: 12pt
+geometry: a4paper
+---
+
+```{=html}
+<!-- Title page for HTML output -->
+<div style="text-align: center;">
+    <h1 style="font-size: 2em; font-weight: bold;">Gaza NowPop Methodology Report: Population nowcasting for Gaza using telecommunications data</h1>
+    <br>
+
+    <p style="font-size: 1.2em; font-weight: bold">Real Good Research Ltd.<br>
+    <a href="https://realgoodresearch.com" target="_blank" style="font-size: 1em; font-weight: normal">https://realgoodresearch.com</a></p>
+
+    <p style="font-size: 1.2em">Douglas R. Leasure, PhD<sup>1</sup></p>
+   
+    <br><br>
+</div>
+<div style="text-align: left;">
+
+    <p><strong>Publication Date:</strong> 29 December 2025</p>
+    
+    <p><strong>Classification:</strong> Strictly Confidential<sup>2</sup></p>
+
+    <p><strong>Sensitivity:</strong> Severe Sensitivity</p>
+
+    <p><strong>Suggested Citation:</strong> Leasure DR. 2025. Gaza NowPop Methodology Report: Population nowcasting for Gaza using telecommunications data. Real Good Research Ltd. Published December 29, 2025.</p>
+
+    <br>
+
+    <p style="font-style: italic;">While every effort was given to produce methods and data suitable for operational purposes, the results are provided "as is" without warranty of any kind. In no event shall the authors or copyright holders be liable for any claim, damages or other liability arising from, out of or in connection with the contents of this report, supplementary data, or source code.</p>
+
+    <hr>
+    <p style="font-size: 0.8em"><sup>1</sup><em>Director and Research Data Scientist for Real Good Research Ltd.
+    <br>Senior Researcher and Data Scientist for the Demographic Science Unit in the Department of Population Health at the University of Oxford. 
+    <br>Note: University of Oxford was not involved in this work.</em></p>
+    
+    <p style="font-size: 0.8em"><sup>2</sup><em>See <a href="https://www.unocha.org/publications/report/occupied-palestinian-territory/information-sharing-protocol-occupied-palestinian-territory-june-2024" target="_blank">UNOCHA (2024) Information Sharing Protocol for the Occupied Palestinian Territory.</a></em></p>    
+</div>
+
+<style>
+.filename {
+  background-color: #f0f0f0;
+  padding: 2px 4px;
+  border-radius: 4px;
+  font-family: monospace;
+}
+</style>
+```
+
+
+```{r}
+#| include: false
+
+options(scipen = 999)
+
+# libraries
+library(terra)
+library(dplyr)
+library(knitr)
+library(kableExtra)
+library(DT)
+
+# directories
+wd <- file.path("wd")
+if (!dir.exists(wd)) {
+  wd <- file.path("..", wd)
+}
+
+fig_dir <- file.path(wd, "out_methods", "report", "figs")
+```
+
+\newpage
+# Summary  
+
+\newpage
+# Introduction
+This report documents the population nowcasting methodolgy developed by Real Good Research Ltd on behalf of Acted, the Site Management Cluster, and UNOCHA. This approach is designed to utilise frequently updated telecommunications data to estimate population sizes and changes in population at the neighbourhood level each week. These near real-time population estimates are intended for operational uses to support humanitarian decision making as conditions on the ground change and populations move.  
+
+# Data
+
+## Raw Inputs
+
+### Telecommunications
+Aggregated and anonymised telecommunciations data were provided to UNOCHA by two telecommunications providers in the Gaza strip. These data included counts of subscribers assigned to each telecommunications tower along with the location of each tower. Updates were provided upon request for the project, usually once per week. No individual-level data or personal information were included with these data.
+
+### Building footprints
+Building footprints representing the pre-war conditions were obtained from the <a href="https://www.hotosm.org/projects/gaza-building-footprints-pre-conflict-update-2024/" target="_blank">Humanitarian OpenStreetMaps Team (HOT)</a>. This provided a baseline of building locations that was then supplemented using additional building locations from the UNOSAT building damage assessment products (see below).
+
+### Building damage
+UNOSAT provided a building damage assessment based on satellite imagery from October 14, 2025. This was an Esri geodatabase containing point geometries of building locations with a categorical damage assessment for each building. Building locations were based on the cadastral registry from the Palestinian Central Bureau of Statistics which also included the number of housing units in each building. Each building was categorised by UNOSAT as destroyed, severely damaged, moderately damaged, possibly damaged, no visible damage, possible damage from adjacent impact, or unclassified. The number of undamaged housing units was also estimated for each building by UNOSAT as part of the assessment.
+
+### Evacuation orders 
+The "yellow line" evacuation area along the Gaza border was provided by UNOCHA as a geospatial .kml file representing the yellow line as of 10 October 2025. 
+
+Israeli military displacement orders were collected from the <a href="https://app.powerbi.com/view?r=eyJrIjoiNjY4NzkwMjItYzI2MC00NmQ4LWE2MTktMDQxMjBmMTk5NmIwIiwidCI6IjBmOWUzNWRiLTU0NGYtNGY2MC1iZGNjLTVlYTQxNmU2ZGM3MCIsImMiOjh9" target="_blank">UNOCHA dashboard</a> and the evacuation zone boundaries were obtained from the GitHub repository <a href="https://github.com/bothness/gaza-geojson" target="_blank">bothness/gaza-geojson</a>. The last evacuation orders were documented on 13 September 2025, so these evacuation orders did not affect population nowcasting results after that date, but a mechanism to account for evacuation orders was still included in the methdology.
+
+### Satellite imagery
+Satellite imagery was made accessible to the project by UNOCHA. The image acquisition date was 14 October 2024 and the mosaic of images provided covered the entire Gaza strip with a spatial resolution of 0.5 m. The imagery was used to manually digitise crude polygons that encompassed tent encampments.
+
+### Administrative boundaries
+Harmonised geospatial administrative boundaries were provided by UNOCHA for governorates, municipalities, and neighbourhoods of the Gaza Strip including p-codes for each administrative unit. All reporting of population estimates uses these boundaries, names, and p-codes.
+
+## Data Preparation
+A 100-m mastergrid was created that defined the grid squares where population estimates would be produced. All of the inputs were processed to be represented on this 100-m grid. This included the coverage of pre-war buildings in each grid square based on the HOT building footprints as well as total buildings destroyed, undamaged housing, and proportion housing not destroyed based on the UNOSAT building damage assessment. Coverage of tents was also calculated for each grid square based on crude manually digitised tent encampments (see below for details). A gridded version of current evacuation orders and the militarised "yellow line" was also created to identify grid squares under evacuation orders during the analysis date.
+
+# Analysis
+The goal of the analysis was to produce population estimates on a 100-m grid covering the Gaza strip which can then be summarised at the neighbourhood, municipality, and governorate levels. The gridded estimates are necessary because the coverage areas of telecommunications towers cross these administrative boundaries making it difficult to assign subscribers from a tower into specific administrative units. The methodology uses the telecommunications data combined with additional information from evacuation orders, remotely sensed buildings, building damage, and tents to facilitate the gridded population estimation process. The 100-m gridded population estimates are an intermediate product, rather than the final output because they are expected to be less accurate than the aggregated population estimates at the neighbourhood level or above.
+
+The analysis methodology described below was carried out for each date when telecommunications data were available from both providers. 
+
+The source code for the analysis is available upon request for authorised staff from <a href="https://github.com/realgoodresearch/GazaNowPop" target="_blank">https://github.com/realgoodresearch/GazaNowPop</a> (note: the hyperlink will be inaccessible until access is granted).
+
+
+## Available housing units
+A map of available housing units was created as a 100-m grid. The purpose of the housing coverage grid was to map populations assigned to a given telecommunications tower into the 100-m grid squares within the coverage area of the tower. 
+
+### Building coverage (pre-war)
+This process started with the pre-war building coverage grid based on the HOT building footprints (@fig-building-coverage). The building coverage grid identified the proportion of each 100-m grid square containing buildings before the war. Buildings classified as "greenhouse", "greenhouse_horticulture", or "water_tower" were excluded from the building coverage grid. 
+
+```{r}
+#| echo: false
+#| label: fig-building-coverage
+#| fig-cap: "Building coverage grid based on the Humanitarian OpenStreetMaps Team building footprints for Gaza. Brighter grid squares have higher coverage of buildings. Colours of building footprints indicate different building types. Green buildings are greenhouses that have been excluded from our building coverage grid."
+#| fig-width: 6
+#| out.width: "100%"
+#| fig-align: center
+knitr::include_graphics(file.path(
+  fig_dir,
+  "building_coverage.png"
+))
+```
+
+### Building damage
+The building coverage grid was adjusted to account for building damage based on the proportion of housing units that remained undamaged in each grid square derived from <a href="https://www.un.org/unispal/document/unosat-gaza-strip-damage-assessment-31oct25/" target="_blank">UNOSAT's building damage assessment from October 11</a> (@fig-housing-damage). For example, if a grid square was 50% covered by buildings before the war and UNOSAT reported that 50% of housing units were destroyed in that grid square, we would assign a value of 25% to the grid square. This provides an index of housing units that are theoretically available in buildings that have not been destroyed in each grid square. 
+
+```{r}
+#| echo: false
+#| label: fig-housing-damage
+#| fig-cap: "Gridded proportion of undamaged housing units based on UNOSAT's building damage assessment. Brighter grid squares have higher proportions of undamaged housing units as of October 11. Points represent individual buildings and their colours represent the damage category assigned to the building by UNOSAT (dark red and red dots were 'destroyed' or 'severely damaged', yellow dots were 'moderately damaged')."
+#| fig-width: 6
+#| out.width: "100%"
+#| fig-align: center
+knitr::include_graphics(file.path(
+  fig_dir,
+  "housing_damage.png"
+))
+```
+
+### Tent mapping
+We now need to account for tents as available "housing units" to help allocate populations to these grid cells where there are no buildings. In the absence of an up-to-date and high quality tent mapping layer, our tent coverage grid was based on manually-delineated polygons crudely outlining areas where tents were visible in satellite imagery from October 14 and masking out building footprints (@fig-tent-mapping, @fig-tent-mapping-macro). These polygons did not identify individual tents, and so were not directly comparable to building coverage based on individual building footprints. We treated each coverage unit of tents as 10% of a building coverage unit when combining the two coverage grids. For the purposes of neighbourhood-level population estimation, the accuracy of the tent layer is not critically important as long as it identifies regions where tents occur. However, this is a key component that needs to be improved for future iterations, particularly to improve the accuracy of our 100-m gridded population estimates, and that needs to be regularly updated to account for the changing geographic distribution of tents through time. 
+
+```{r}
+#| echo: false
+#| label: fig-tent-mapping
+#| fig-cap: "Manually-delineated areas containing tents (shaded in red) that were visible in satellite imagery from October 14."
+#| fig-width: 6
+#| out.width: "100%"
+#| fig-align: center
+knitr::include_graphics(file.path(
+  fig_dir,
+  "tent_mapping.png"
+))
+```
+```{r}
+#| echo: false
+#| label: fig-tent-mapping-macro
+#| fig-cap: "Zoomed out view of manually delineated areas containing tents (shaded in red) in Deir al Balah and Khan Younis governorates. The white lines identify the boundaries of governorates (bold lines), municipalities (medium lines), and neighbourhoods (thin lines)."
+#| fig-width: 6
+#| out.width: "100%"
+#| fig-align: center
+knitr::include_graphics(file.path(
+  fig_dir,
+  "tent_mapping_macro.png"
+))
+```
+
+### Uninhabitable areas
+There were many unihabited locations where some housing units remain, but where nearly all buildings have been destroyed, or that have been deemed evacuation zones. To avoid mapping populations into isolated buildings that remain in otherwise completely destroyed neighbourhoods, we assumed grid squares were uninhabitable (i.e. housing coverage = 0) where greater than 90% of buildings within 500-m had been destroyed or less than 10% of housing units remained within 500-m. Any areas under active evacuation orders or within the militarised area behind the "yellow line" were also assumed to be uninhabitable.
+
+### Coverage of available housing/tents
+A final grid of housing availability was created by combining the grids of building coverage, undamaged housing units, tents, and uninhabitable areas (@fig-housing-mask). This grid mapped the availability of housing and tents in habitable areas. This layer does not imply that people are living in these grid cells, only that there is some form of housing or tents there. 
+
+```{r}
+#| echo: false
+#| label: fig-housing-mask
+#| fig-cap: "The final grid of available housing coverage that combined the grids of building coverage, undamaged housing units, tent mapping, and uninhabitable/evacuated areas. Brighter colours indicate more housing coverage. The white lines identify the boundaries of governorates (bold lines), municipalities (medium lines), and neighbourhoods (thin lines). The yellow area is the militarised zone where it was assumed to be uninhabitable."
+#| fig-width: 6
+#| out.width: "100%"
+#| fig-align: center
+knitr::include_graphics(file.path(
+  fig_dir,
+  "housing_mask.png"
+))
+```
+
+## Population estimation
+Now that we have a map of available housing units and tents, we can start to assign population estimates to those grid cells based on the geographic distribution of telecommunications subscribers on a particular date. Note that our map of available housing units is relatively static, whereas the telecommunications data is updated weekly. There is therefore some error associated with the lag in updating tent distributions and changing availability of housing units due to ongoing building damage.
+
+### Telecommunications tower coverage areas
+The exact coverage area for each telecommunications tower is unknown and can be influenced by the antenna placement, power level, topography, surrounding buildings, and other factors. We approximated the coverage area for each tower assuming that mobile devices on a given mobile provider's network connect to the nearest tower within 2-km. This assumption was operationalised with the following procedure for towers on each provider's network separately. 
+
+We started by generating a Voronoi polygon set for all towers on a given network (@fig-tower-catchments). Voronoi polygons define a boundary around the ground area where a given tower is closer than any other tower. The Voronoi polygons were intersected with a 2-km buffer around each tower to create coverage area polygon for each tower. If the catchment area for a tower was completely within evacuation zones, then it was combined with the nearest neighbouring tower. 
+
+```{r}
+#| echo: false
+#| label: fig-tower-catchments
+#| fig-cap: "Catchment areas of simulated telecommunications towers (dots) approximated by Voronoi polygons buffered within a 2-km radius. The two colours represent different telecommunications providers. Note: Tower locations and catchment areas shown here are simulated for demonstration purposes only. They are not actual tower locations."
+#| fig-width: 6
+#| out.width: "100%"
+#| fig-align: center
+knitr::include_graphics(file.path(
+  fig_dir,
+  "tower_catchments.png"
+))
+```
+
+### Subscriber grids
+The subscribers on each tower were mapped into grid squares within the tower's coverage area. The cells of the housing availabiility grid within a given tower's coverage polygon were rescaled to sum to one and then multiplied by the number of subscribers on the corresponding tower. Summing cells of the subscriber grid within a tower's coverage polygon always equals the number of subscribers originally assigned to the tower in the raw telecommunications data. This resulted in a 100-m subscriber grid for each telecommunication provider's network (@fig-subscriber-grid1, @fig-subscriber-grid2).
+
+```{r}
+#| echo: false
+#| label: fig-subscriber-grid1
+#| fig-cap: "The subscriber grid for telecommunications provider #1 that was created by disaggregating the subscriber counts for each tower into 100-m grid cells with the towers' catchment areas proportional to the available housing in those grid cells."
+#| fig-width: 6
+#| out.width: "100%"
+#| fig-align: center
+knitr::include_graphics(file.path(
+  fig_dir,
+  "subscriber_grid1.png"
+))
+```
+
+```{r}
+#| echo: false
+#| label: fig-subscriber-grid2
+#| fig-cap: "The subscriber grid for telecommunications provider #2 that was created by disaggregating the subscriber counts for each tower into 100-m grid cells with the towers' catchment areas proportional to the available housing in those grid cells."
+#| fig-width: 6
+#| out.width: "100%"
+#| fig-align: center
+knitr::include_graphics(file.path(
+  fig_dir,
+  "subscriber_grid2.png"
+))
+```
+
+### Extrapolating from subscribers to population sizes
+We now need to combine the two subscriber rasters and account for people who are not subscribers on either network to generate a single population grid (). To accomplish this, we calculated the penetration rate for each provider as the total number of subscribers on their network dived by 2.1 million (i.e. the total population of the Gaza strip). For grid squares with coverage for a single provider (i.e. no tower within 2 km for the other provider), the population was estimated as the number of subscribers in the grid square divided by the appropriate provider's penetration rate. For grid squares with coverage for both providers, the subscribers were summed and the penetration rates were summed before estimating population as the subscriber count divided by the penetration rate. The resulting population grid for the Gaza strip was rescaled as a final step to ensure that it summed to a total of 2.1 million people. This procedure assumes that the penetration rates for each telecommunication provider do not vary among governorates (i.e. we apply the average penetration rates for the Gaza strip).
+
+```{r}
+#| echo: false
+#| label: fig-population-grid
+#| fig-cap: "100-m gridded population estimates that were created by combining the telecommunications subscriber grids (see above) from two telecommunications networks and accounting for each network's penetration rate (i.e. the proportion of the population that is on the network)."
+#| fig-width: 6
+#| out.width: "100%"
+#| fig-align: center
+knitr::include_graphics(file.path(
+  fig_dir,
+  "population_grid.png"
+))
+```
+
+### Aggregating populations to administrative areas
+We aggregated the 100-m gridded population estimates up to the neighbourhood level for operational uses. It is important to note that we do not expect the 100-m gridded population estimates to have high accuracy because of challenges keeping the map of available housing up-to-date and the continuously changing geographic distribution of tents. The granularity provided by the 100-m resolution population estimates are also not needed for most operational uses. The gridded estimates were produced primarily as an intermediate step to help accommodate telecommunications tower networks with non-aligned coverage areas (@fig-tower-catchments) and to avoid mapping populations into areas with cell coverage that do not have any available housing or tents (@fig-housing-mask).
+
+We aggregated the 100-m gridded population estimates to the neighbourhood level, municipality level, and governorate level (@fig-population-neighbourhood).  
+```{r}
+#| echo: false
+#| label: fig-population-neighbourhood
+#| fig-cap: "100-m gridded population estimates aggregated to the neighbourhood level."
+#| fig-width: 6
+#| out.width: "100%"
+#| fig-align: center
+knitr::include_graphics(file.path(
+  fig_dir,
+  "population_neighbourhood.png"
+))
+```
+
+### Population change
+We calculated the change in population by comparing the latest population estimates (grid, neighborhood, municipality, and governorate) to population estimates from previous dates. We used 29 September 2025 as a baseline date for monitoring changes in populations compared to the most recent period with data available from before the ceasefire on October 10. We often also calculated population changes compared to the most recent previous population estimate to provide an indicator of recent mobility patterns. 
+
+It is important to note that these estimates of net changes in population provide a useful indicator of mobility, however they are not direct measures of population flows. Net population changes would reflect zero change in cases where the number of people leaving an area is equal to the number of people entering the area (e.g. a transit location). 
+
+# Outputs
+This analytical workflow was used to estimate populations for each date when telecommunications data were available which included: October 19, 22, and 26; November 2, 5, 16, 23, and 30; and December 11 and 16. For each analysis date, the following outputs were provided:  
+
+<ol>
+<li> A short report describing the results (pdf or html),</li>
+<li> 100-m gridded population estimates (csv and geotiff),</li>
+<li> Neighbourhood-level population estimates (csv and geopackage),</li>
+<li> Municipality-level population estimates (csv and geopackage),</li>
+<li> Governorate-level population estimates (csv and geopackage), and</li>
+<li> Estimates of population change at all geographic levels and file formats above.</li>
+</ol>
+
+The source code for the analysis is now available upon request for authorised staff from <a href="https://github.com/realgoodresearch/GazaNowPop" target="_blank">https://github.com/realgoodresearch/GazaNowPop</a> (note: the hyperlink will be inaccessible until access is granted).
+
+# Assumptions and limitations
+It is important to make note of the main assumptions and limitations of this analysis and the population estimates produced.  
+
+<ul>
+<li>It was not possible to rigorously assess the accuracy of the population estimates produced in the absence of ground-truth data. We relied of triangulation and reviews from OCHA field staff on the ground in Gaza who identified questionable results in early iterations that led to improvements in the methodology for mapping available housing (e.g. tent mapping and accounting for destroyed buildings).</li>
+<li>It was beyond the scope of this project to map tents at a detailed level and to continuously update the tent map as new imagery became available. We mapped tents using imagery from October 14 and assumed the distribution of tents was static after that date. This is a top-priority for improvements in the future.</li>
+<li>Areas without cell coverage (i.e. greater than 2-km from a cell tower), were assumed to have no population. This was a necessary assumption in the absence of telecommunications data with full coverage of the Gaza strip or another data source to help fill the gaps in coverage.</li>
+<li>We assumed that no people were present in areas under active evacuation orders, including the large militarised zone behind the "yellow line". It is possible that some people are located in these areas--there are some tents visible in recent imagery--but there are very few telecommunications towers with coverage into these areas which makes it difficult to estimate populations there.</li>
+<li>We assumed that the average penetration rate for each telecommunications provider applied equally to every tower. This does not account for geographic differences in subscriber preferences for mobile networks nor does it account for periodic outages on some towers that would effectively reduce the penetration rate in the vicinity temporarily.</li>
+<li>The telecommunications data provide no information about age-sex demographics of subscribers, so it is not possible to make inferences about the demographics of populations in different areas.</li>
+</ul>
+
+# Conclusions
+This work provided a critical source of information on population sizes and movements despite the necessary limitations and assumptions. We strongly recommend a continuation of the project as long as telecommunications data are available to provide near real-time updates on population geography to support needs assessments and targeted delivery of humanitarian assistance.  
+
+We have identified three key areas, from our perspective, that are top priorities for methodological improvements:  
+<ol>
+<li><strong>UNOSAT tent mapping:</strong> A manual tent mapping effort is underway at UNOSAT, and we hope to use those results in future iterations of population nowcasting to update the geographic distribution of tents.</li>
+<li><strong>Shelter needs assessment:</strong> Our population nowcasting results can be combined with UNOSAT's building damage assessments for shelter needs assessments to map (1) people per undamaged housing unit and (2) people per tent to provide up-to-date indicators of shelter needs as conditions on the ground change and people relocate.</li>
+<li><strong>Automated tent mapping:</strong> Regularly updated satellite imagery combined with manually annotated tents from recent imagery can be used to train machine learning models to automate the mapping of tents. Regularly updated imagery is available from Planet and a student mapping effort at the University of Oxford has already produced the necessary training data. We see this as a top priority for next steps, acknowledging that a development period will be needed to operationalise the approach.</li>
+</ol>
+
