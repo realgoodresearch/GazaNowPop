@@ -1,0 +1,157 @@
+---
+title-block: false
+title: ""
+author: "" 
+date: ""
+format: 
+    html:
+      self-contained: true
+      toc: true
+      toc-depth: 3
+      theme: cosmo
+      code-fold: true
+fontfamily: roboto
+fontsize: 12pt
+geometry: a4paper
+---
+
+```{=html}
+<!-- Title page for HTML output -->
+<div style="text-align: center;">
+    <h1 style="font-size: 2em; font-weight: bold;">Gaza NowPop Final Report: Humanitarian population nowcasting for Gaza using telecommunications data</h1>
+    <br>
+
+    <p style="font-size: 1.2em; font-weight: bold">Real Good Research Ltd.<br>
+    <a href="https://realgoodresearch.com" target="_blank" style="font-size: 1em; font-weight: normal">https://realgoodresearch.com</a></p>
+
+    <p style="font-size: 1.2em">Douglas R. Leasure, PhD<sup>1</sup></p>
+   
+    <br><br>
+</div>
+<div style="text-align: left;">
+
+    <p><strong>Publication Date:</strong> 30 December 2025</p>
+    
+    <p><strong>Classification:</strong> Strictly Confidential<sup>2</sup></p>
+
+    <p><strong>Sensitivity:</strong> Severe Sensitivity</p>
+
+    <p><strong>Suggested Citation:</strong> Leasure DR. 2025. Gaza NowPop Final Report: Humanitarian population nowcasting for Gaza using telecommunications data. Real Good Research Ltd. Published December 30, 2025.</p>
+
+    <br>
+
+    <p style="font-style: italic;">While every effort was given to produce methods and data suitable for operational purposes, the results are provided "as is" without warranty of any kind. In no event shall the authors or copyright holders be liable for any claim, damages or other liability arising from, out of or in connection with the contents of this report, supplementary data, or source code.</p>
+
+    <hr>
+    <p style="font-size: 0.8em"><sup>1</sup><em>Director and Research Data Scientist for Real Good Research Ltd.
+    <br>Senior Researcher and Data Scientist for the Demographic Science Unit in the Department of Population Health at the University of Oxford. 
+    <br>Note: University of Oxford was not involved in this work.</em></p>
+    
+    <p style="font-size: 0.8em"><sup>2</sup><em>See <a href="https://www.unocha.org/publications/report/occupied-palestinian-territory/information-sharing-protocol-occupied-palestinian-territory-june-2024" target="_blank">UNOCHA (2024) Information Sharing Protocol for the Occupied Palestinian Territory.</a></em></p>    
+</div>
+
+<style>
+.filename {
+  background-color: #f0f0f0;
+  padding: 2px 4px;
+  border-radius: 4px;
+  font-family: monospace;
+}
+</style>
+```
+
+\newpage
+# Introduction
+**Real Good Research** has been leading population nowcasting efforts for the crisis response in Gaza since October 7, 2023 working with the Assessment and Information Management Working Group (AIMWG) led by the United Nations Office for Coordination of Humanitarian Affairs (UNOCHA), the Site Management Cluster led by Acted and the International Organisation for Migration (IOM), and the Health Cluster led by the World Health Organisation.  Our efforts have included developing various methodologies to produce up-to-date population estimates based on real-time social media targeted advertising data, three rounds of polio vaccination data, and, most recently, tower-level telecommunications data. The common thread through time has been a constantly changing data landscape and a highly mobile population as volatile conditions on the ground have left no consistently safe locations for civilians to take shelter. This dynamic context has required innovations through a process of rapid prototyping to take advantage of a new data source followed by iterative innovation as population estimates from the data source become operationalised.   
+
+> This **Gaza NowPop Project** leveraged telecommunications data for population nowcasting in Gaza, providing reliable, high-quality snapshots of population sizes at the neighbourhood level on a weekly basis. 
+
+This final report summarises the Gaza NowPop Project and offers some recommendations for future work to build on the significant positive momentun gained over the course of the relatively short initial project period. 
+
+## Key take-aways
+
+1. The Gaza NowPop Project enabled neighbourhood-level population estimates on a weekly (or *ad hoc*) basis to support operational decision making for Gaza.  
+2. Tower-level telecommunications data have provided a high quality data source for population nowcasting that has been the most stable through time, being consistently available upon request since January 2025.  
+3. Automated tent mapping from satellite imagery is a top priority for future research to improve high-resolution population nowcasting by accounting for highly mobile tent encampments as vulnerable populations relocate due to flooding, evacuation orders, and other changing conditions.  
+4. Fledgling partnerships were developed with UNOSAT and several academic collaborators that warrant continued engagement for the benefit of population nowcasting and tent mapping for Gaza.  
+5. We hope to continue to build upon the momentum gained during the project into 2026, to integrate the outputs more directly for SMC and AIMWG decision making, and to develop stronger mechanisms for routine feedback to facilitate improvements over time. 
+
+
+# Project summary
+The project ran from October 20 through the end of December 2025. During this time, a bespoke methodology was developed (see @sec-methodology) to estimate current population sizes at the neighbourhood-level for Gaza based on anonymised and aggregated telecommunications subscriber locations. We produced nine short reports with population nowcasting results derived from the new methodology, along with a detailed methodology report and source code to encourage reproducibility (see @sec-deliverables). 
+
+Early **population nowcasting results were shared with the Site Management Cluster and UNOCHA for review, triangulation, and feedback**. Valuable feedback was received from UNOCHA field staff on the ground in Gaza who identified several locations with questionable results from the prototype methodology. This led to the integration of additional data about the geographic distribution of available housing and tent encampments to improve the population estimates. Further feedback helped identify that there could be up to a one week lag in telecommunications data reflecting recent population movements for some areas. 
+
+**Up-to-date building damage assessments and maps of tent encampments were identified early in the project as key data sources** to combine with the telecommunications data to improve geospatial resolution and accuracy of the population estimates. Our methodology incorporated both of these data sources, and we initiated discussions with several partners on potential to routinely update these data for future population nowcasting efforts (see @sec-unosat and @sec-tents). 
+
+This project provided a **strong proof-of-concept for using the telecommunications data for population nowcasting** to support humanitarian decision making in Gaza. The telecommunications data have been reliably available upon request since January 2025 which makes it perhaps the most stable data source used for population nowcasting in Gaza to date. This is also the only data source that provides a reasonably high-quality signal of population sizes and changes at the neighborhood level, which is the primary spatial units used for operational decision making. 
+
+Despite the undeniable benefits of the telecommunications data for humanitarian population nowcasting, there are also some caveats that need to be mentioned for this data source. There are blind spots where there is no coverage in Gaza, particularly for Rafah governorate, the northern areas of North Gaza, and eastern areas of Khan Younis governorate. There are few, if any, people in these areas, but it is important to note that the telecommunications data currently cannot support population nowcasting in these areas, although this may change as the networks are repaired and coverage expands. While data access has been stable over a sustained period of time, it must be noted that continued data access remains at the discretion of telecommunications providers.  
+
+## Methodology {#sec-methodology}
+Our methodology generated population estimates at the neighourhood level for every date when telecommunications data were available. Please refer to our full methodology report for the details of the analysis. The approach followed the following steps:  
+
+1. Map available shelter across a 100-m grid covering Gaza based on the geographic distribution of undamaged housing units, tent encampments, destroyed neighbourhoods, and evacuation orders.
+2. Approximate the coverage area of each tower assuming that a device would connect to the nearest tower within 2-km,  
+3. Disaggregate subscribers for each tower into 100-m grid squares in the tower's coverage area based on available shelter,  
+4. Extrapolate from subscriber counts to population sizes (including people not on either of the provider's networks) based on the estimated penetration rates for each provider.
+
+The methodology incorporated the following data sources:  
+
+- Anonymised telecommunications data with counts of active subscriberse aggregated to geolocated towers for two telecommunications providers covering over 1.2 million subscriber accounts,  
+- <a href="https://www.hotosm.org/projects/gaza-building-footprints-pre-conflict-update-2024/" target="_blank">Humanitarian OpenStreetMaps Team (HOT)</a>,  
+- <a href="https://www.un.org/unispal/document/unosat-gaza-strip-damage-assessment-31oct25/" target="_blank">UNOSAT's building damage assessment from October 11</a>,  
+- A bespoke tent map based on satellite imagery from October 14, and   
+- <a href="https://app.powerbi.com/view?r=eyJrIjoiNjY4NzkwMjItYzI2MC00NmQ4LWE2MTktMDQxMjBmMTk5NmIwIiwidCI6IjBmOWUzNWRiLTU0NGYtNGY2MC1iZGNjLTVlYTQxNmU2ZGM3MCIsImMiOjh9" target="_blank">Israeli military evacuation orders compiled by UNOCHA</a>. 
+
+## Deliverables {#sec-deliverables}
+The following deliverables were produced over the course of this project:  
+
+1. *[30 Dec 2025]* Gaza NowPop Final Report: Humanitarian population nowcasting for Gaza using telecommunications data,  
+2. *[29 Dec 2025]* Gaza NowPop Methodology Report: Population nowcasting for Gaza using telecommunications data,  
+3. *[29 Dec 2025]* <a href="https://github.com/realgoodresearch/GazaNowPop" target="_blank">Gaza NowPop Source Code</a> (note: the link to source code will only work for authorised users),  
+4. *[19 Dec 2025]* Gaza NowPop: Population nowcasting for Gaza using telecoms data from Dec 16, 2025,  
+5. *[5 Dec 2025]* Gaza NowPop: Population nowcasting for Gaza using telecoms data from Nov 30, 2025,  
+6. *[26 Nov 2025]* Gaza NowPop: Population nowcasting for Gaza using telecoms data from Nov 23, 2025,  
+7. *[18 Nov 2025]* Gaza NowPop: Population nowcasting for Gaza using telecoms data from Nov 16, 2025,  
+8. *[10 Nov 2025]* Gaza NowPop: Population nowcasting for Gaza using telecoms data from Nov 5, 2025,  
+9. *[5 Nov 2025]* Gaza NowPop: Population nowcasting for Gaza using telecoms data from Nov 2, 2025,  
+10. *[5 Nov 2025]* Gaza NowPop: Revision of population nowcasting for Gaza using telecoms data from Oct 26,  
+11. *[30 Oct 2025]* Gaza NowPop: Population nowcasting for Gaza using telecoms data from Oct 26,   
+12. *[28 Oct 2025]* Gaza NowPop: Population nowcasting for Gaza using telecoms data from Oct 22, and   
+13. *[27 Oct 2025]* Gaza NowPop: Population nowcasting for Gaza using telecoms data from Oct 19.   
+
+# Recommendations for the future
+This project demonstrated the feasibility of rapidly producing up-to-date population estimates at the neighbourhood level using aggregated and anonymised telecommunications data. The project built significant momentum with the successful development of a methodology to integrate telecommunications data with building footprints, damage assessments, evacuation orders, and tent mapping from satellite imagery. Perhaps most importantly, the availability of telecommunications data has been shown to be reliable and stable over time. We want to highlight two key areas for improvements in future phases of the project based on lessons learned and discussions with project partners and potential collaborators. 
+
+## UNOSAT building damage {#sec-unosat}
+UNOSAT's building damage assessments provided a valuable source of information on building damage and housing units that remained undamaged. We used these data as inputs for the population nowcasting analyses, but we think there remain untapped opportunities to integrate the population estimates with the building damage assessment to quantify shelter needs (e.g. people per undamaged housing unit). UNOSAT provided early access to their building damage assessment for this project and generated some bespoke metrics specfiically related to housing units that were extremely useful. UNOSAT have expressed an interest in collaborating with the Gaza NowPop Project in the future, and we strongly encourage strengthening this partnership for mutual benefit to the missions of the Site Management Cluster and UNOSAT.  
+
+## Tent mapping {#sec-tents}
+**We see up-to-date tent mapping as the top-priority for future work to improve population nowcasting outputs**. High quality tent mapping that is routinely updated has the potential to significantly improve the quality of population estimation at sub-neighbourhood spatial scales (e.g. 100-m grid). We have a signal of the number of people on a cell tower, and a regularly updated tent layer is the only data source with information to allocate population counts into specific areas where tents are currently located. 
+
+UNOSAT has a project underway conducting manual tent mapping from satellite imagery. We hope to use their tent mapping products in the next iteration of population nowcasting, but we are also pursuing *automated* tent mapping methodologies that could produce updated tent maps at least monthly. 
+
+Forensic Architecture at Goldsmiths, University of London initiated a collaboration with University of Oxford PhD students to prototype a machine learning algorithm to automate the mapping of tents in Gaza using Planet Labs 0.5-m resolution satellite imagery. The Oxford students, Jessica Rapson and Karim Alaa El-Din, led a group of student volunteers to manually annotate thousands of tents in recent historical imagery to use as training data. They have now produced a prototype machine learning model and are working on the first operational outputs. Planet Labs are providing regularly updated (e.g. weekly) satellite imagery to support this effort. The Oxford students are interested and available to join future phases of the Gaza NowPop Project to routinely produce tent mapping layers which would have broad benefits across the humanitarian response. 
+
+The Interdisciplinary Institute for Societal Computing (I2SC), led by Prof. Ingmar Weber at the University of Saarland, are close collaborators that have been pioneering methods to use digital trace data and satellite imagery for humanitarian response and social good. They have expressed interest in engaging with the tent mapping effort as well without the need for financial support. Their involvement has two potential benefits: (1) providing research assistants with expertise in satellite imagery and machine learning to help improve the protoype tent mapping algorithm described above, and (2) scaling up this approach to automate production of tent maps each time new imagery becomes available. 
+
+**We intend to pursue these tent mapping options to improve population nowcasting in the future, and to help produce tent mapping layers that will have broad benefits across the humanitarian response**. We aim to proceed as follows:  
+
+1. Integrate UNOSAT's manual tent mapping layer in the next iterations of population nowcasting,  
+2. Transition to the first operational prototype of automated tent mapping, facilitated by recruiting one of the Oxford students onto the next phase of the Gaza NowPop Project, and  
+3. Collaborate with I2SC for the automation and scaling-up of tent mapping in Gaza over the long-term.  
+
+# Conclusions
+This project provided a proof-of-concept and reproducible methodology to estimate populations at the neighbourhood level in Gaza by integrating telecommunications data with other data sources related to geographic distribution of shelter availability (e.g. undamaged housing units, tents). We recommend nurturing the fledgling partnerships that were formed with UNOSAT, I2SC, Forensic Architecture, and external volunteer-based tent mapping projects to continue to build on the momentum generated during this short project. 
+
+We sincerely hope that the population nowcasting reports and data produced through this project have benefitted the Site Management Cluster and the Analysis and Information Management Working Group efforts to provide targeted aid to Gazans. In moving beyond this initial project, we are keen to integrate this work more directly into the SMC and AIMWG decision making processes, establish regular feedback mechanisms to improve the outputs, and identify additional sources of data (e.g. key informants, registration) that can be used for triangulation or integrated as additional inputs. We encourage the continuation of this project after discussions to revise aims and objectives based on lessons learned from the perspectives of the key stakeholders.  
+
+
+
+
+
+
+
+
+
