@@ -19,8 +19,11 @@ env <- new.env()
 source(here::here(".env"), local = env)
 
 # directories
-dir.create(env$wd, showWarnings = F, recursive = T)
-setwd(env$wd)
+if (dir.exists(env$wd)) {
+  setwd(env$wd)
+} else {
+  stop("Working directory does not exist.")
+}
 
 in_dir <- file.path(getwd(), "in")
 src_dir <- file.path(here::here(), "src")
@@ -28,7 +31,7 @@ out_dir <- file.path(getwd(), "out", "data")
 dir.create(out_dir, showWarnings = F, recursive = T)
 
 #---- load data ----#
-telecoms <- read.csv(file.path(in_dir, "telecoms", "telecoms_20251219.csv"))
+telecoms <- read.csv(file.path(in_dir, "telecoms", "telecoms_20260129.csv"))
 
 gov_geo <- st_read(file.path(
   in_dir,
@@ -90,11 +93,12 @@ bldg_damage <- st_read(
   layer = "Damage_Sites_GazaStrip_20251011_HU"
 )
 
-tents_extent <- st_read(
+tent_pnts <- st_read(
   file.path(
     in_dir,
     "tents",
-    "tents_extent_no_bldgs_with_holes_20251014.gpkg"
+    # "UNOSAT_Gaza_IDP_Tent_points_20251212.gpkg"
+    "UNOSAT_Gaza_IDP_Tent_points_20260111.gpkg"
   )
 )
 
@@ -410,17 +414,33 @@ writeRaster(
 )
 
 
-# tents extent
+# # tents extent
+# tents <- terra::rasterize(
+#   x = vect(tents_extent) %>%
+#     project(mastergrid),
+#   y = mastergrid,
+#   cover = TRUE
+# )
+# plot(tents)
+
+# writeRaster(
+#   tents,
+#   filename = file.path(out_dir, "tents_cover.tif"),
+#   overwrite = TRUE
+# )
+
+# tent count
 tents <- terra::rasterize(
-  x = vect(tents_extent) %>%
-    project(mastergrid),
+  x = tent_pnts %>% mutate(count = 1) %>% vect() %>% project(mastergrid),
   y = mastergrid,
-  cover = TRUE
+  field = "count",
+  fun = sum
 )
+
 plot(tents)
 
 writeRaster(
   tents,
-  filename = file.path(out_dir, "tents.tif"),
+  filename = file.path(out_dir, "tent_count.tif"),
   overwrite = TRUE
 )

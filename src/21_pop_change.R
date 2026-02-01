@@ -4,9 +4,8 @@ gc()
 
 #---- USER OPTIONS ----#
 baseline_date <- "2025-09-29"
-baseline_date <- "2025-11-30"
-baseline_date <- "2025-12-11"
-reference_date <- "2025-12-16"
+baseline_date <- "2025-12-16"
+reference_date <- "2026-01-25"
 #----------------------#
 
 # load libraries

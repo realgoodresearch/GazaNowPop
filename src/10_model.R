@@ -3,8 +3,7 @@ rm(list = ls())
 gc()
 
 #---- USER OPTIONS ----#
-binary_bldg_mask <- FALSE
-reference_date <- "2025-12-16"
+reference_date <- "2026-01-25"
 max_tower_radius <- 2 # max tower radius (km)
 #----------------------#
 
@@ -67,7 +66,7 @@ for (f in lf) {
 bldg_destroyed <- rast(file.path(data_dir, "bldg_destroyed.tif"))
 housing <- rast(file.path(data_dir, "housing.tif"))
 housing_prop <- rast(file.path(data_dir, "housing_proportion_undamaged.tif"))
-tents <- rast(file.path(data_dir, "tents.tif"))
+tents <- rast(file.path(data_dir, "tent_count.tif"))
 
 #---- telecoms ----#
 
@@ -190,38 +189,9 @@ st_write(
 )
 
 
-#---- mask ----#
-
-# create initial building cover raster
-bldg_ras <- bldg_cover
-if (binary_bldg_mask) {
-  bldg_ras[bldg_ras > 0] <- 1
-}
-
-# NAs to zero for building cover raster
-bldg_ras <- ifel(mastergrid == 1 & is.na(bldg_ras), 0, bldg_ras)
-
-# assume 100% of housing remaining in OSM buildings where UNOSAT did not assess damage
-housing_prop <- ifel(
-  mastergrid == 1 & is.na(housing_prop) & bldg_ras > 0,
-  1,
-  housing_prop
-)
-
-# NAs to zero for housing proportion raster
-housing_prop <- ifel(mastergrid == 1 & is.na(housing_prop), 0, housing_prop)
-
-# reduce building coverage proportional to proportion of housing units remaining undamaged
-bldg_ras <- bldg_ras * housing_prop
-
-# add 10% of tent coverage to building coverage
-# NOTE: Building coverage is footprints that do not account for multi-story buildings.
-# NOTE: Tent coverage is extent of areas with tents, so includes ground area between tents.
-# NOTE: 10% is rough adjustment for this difference.
+#---- mask (housing availability) ----#
+housing <- ifel(mastergrid == 1 & is.na(housing), 0, housing)
 tents <- ifel(mastergrid == 1 & is.na(tents), 0, tents)
-bldg_ras <- bldg_ras + (tents * 0.1)
-plot(bldg_ras)
-
 
 # average building destruction within 500 m focal window
 bldg_destroyed_focal <- focal(
@@ -239,27 +209,31 @@ housing_prop_focal <- focal(
   na.rm = TRUE
 )
 
-# remove buildings for large areas of destroyed buildings where there are no tents
-bldg_ras <- ifel(
+# remove housing for large areas of destroyed buildings where there are no tents
+housing_nonisolated <- ifel(
   (bldg_destroyed_focal > 0.9 | housing_prop_focal < 0.1) & tents == 0,
   0,
-  bldg_ras
+  housing
 )
-plot(bldg_ras)
+plot(housing_nonisolated)
+
+# undamanged housing and tents
+housing_tents <- housing_nonisolated + tents
+plot(housing_tents)
 
 # building mask
 bldg_mask <- matrix(
-  bldg_ras[],
-  nrow = nrow(bldg_cover),
-  ncol = ncol(bldg_cover)
+  housing_tents[],
+  nrow = nrow(housing_tents),
+  ncol = ncol(housing_tents)
 )
-bldg_mask <- bldg_mask / max(bldg_mask, na.rm = T)
+# bldg_mask <- bldg_mask / max(bldg_mask, na.rm = T)
 
 # masks
 mask <- build_mask(
   ref_date = reference_date,
   evac = evac,
-  evac_buffers = evac_buffers,
+  evac_buffers = evac_buffers, # NULL,
   bldg_mask = bldg_mask,
   mastergrid = mastergrid
 )
@@ -312,6 +286,8 @@ towers2_zones <- terra::rasterize(
   field = "tower_id",
   background = NA
 )
+
+coverage_mask <- (!is.na(towers1_zones) | !is.na(towers2_zones)) + 0
 
 #---- subscriber rasters ----#
 
@@ -375,29 +351,44 @@ writeRaster(
 
 #---- population estimation ----#
 
-# penetration rates
-penetration1 <- sum(values(subscribers1), na.rm = T) / 2.1e6
-penetration2 <- sum(values(subscribers2), na.rm = T) / 2.1e6
+# housing with and without coverage
+hh_with_cov <- zonal(mask, coverage_mask, fun = "sum", na.rm = T)
+
+# population with and without coverage
+# N = population in coverage area
+# M = population outside coverage area
+# phi = average household size
+
+pop_with_cov <- pop_with_coverage(
+  T = 2.1e6,
+  H = hh_with_cov %>% filter(tower_id == 1) %>% pull(mastergrid),
+  J = hh_with_cov %>% filter(tower_id == 0) %>% pull(mastergrid)
+)
+
+
+# penetration rates (inside coverage area)
+penetration1 <- sum(values(subscribers1), na.rm = T) / pop_with_cov$N
+penetration2 <- sum(values(subscribers2), na.rm = T) / pop_with_cov$N
 
 # population
 population <- mastergrid
 population[mastergrid == 1] <- NA
 
-# # coverage: neither provider
-# idx <- is.na(subscribers1) & is.na(subscribers2) & mastergrid == 1
-# population[idx] <- 0
+# coverage: neither provider
+idx0 <- coverage_mask == 0 & mastergrid == 1
+population[idx0] <- mask[idx0] * pop_with_cov$phi
 
 # coverage: only provider 1
-idx <- !is.na(subscribers1) & is.na(subscribers2)
-population[idx] <- subscribers1[idx] / penetration1
+idx1 <- !is.na(subscribers1) & is.na(subscribers2)
+population[idx1] <- subscribers1[idx1] / penetration1
 
 # coverage: only provider 2
-idx <- is.na(subscribers1) & !is.na(subscribers2)
-population[idx] <- subscribers2[idx] / penetration2
+idx2 <- is.na(subscribers1) & !is.na(subscribers2)
+population[idx2] <- subscribers2[idx2] / penetration2
 
 # coverage: both providers
-idx <- !is.na(subscribers1) & !is.na(subscribers2)
-population[idx] <- (subscribers1[idx] + subscribers2[idx]) /
+idx3 <- !is.na(subscribers1) & !is.na(subscribers2)
+population[idx3] <- (subscribers1[idx3] + subscribers2[idx3]) /
   (penetration1 + penetration2)
 
 # rescale to 2.1e6 total population
