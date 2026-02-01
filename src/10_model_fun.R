@@ -17,19 +17,27 @@ build_mask <- function(ref_date, evac, evac_buffers, bldg_mask, mastergrid) {
     )
   }
 
-  buffer_dates <- names(evac_buffers)
-  buffer_date <- max(buffer_dates[buffer_dates <= ref_date])
-  if (is.na(buffer_date)) {
-    buffer_mat <- matrix(1, nrow = nrow(mastergrid), ncol = ncol(mastergrid))
-  } else {
-    buffer_ras <- evac_buffers[[buffer_date]]
-    buffer_ras[buffer_ras == 1] <- 0
-    buffer_ras[is.na(buffer_ras) & mastergrid == 1] <- 1
+  if (is.null(evac_buffers)) {
     buffer_mat <- matrix(
-      buffer_ras[],
+      1,
       nrow = nrow(mastergrid),
       ncol = ncol(mastergrid)
     )
+  } else {
+    buffer_dates <- names(evac_buffers)
+    buffer_date <- max(buffer_dates[buffer_dates <= ref_date])
+    if (is.na(buffer_date)) {
+      buffer_mat <- matrix(1, nrow = nrow(mastergrid), ncol = ncol(mastergrid))
+    } else {
+      buffer_ras <- evac_buffers[[buffer_date]]
+      buffer_ras[buffer_ras == 1] <- 0
+      buffer_ras[is.na(buffer_ras) & mastergrid == 1] <- 1
+      buffer_mat <- matrix(
+        buffer_ras[],
+        nrow = nrow(mastergrid),
+        ncol = ncol(mastergrid)
+      )
+    }
   }
 
   result <- rast(mastergrid)
@@ -236,4 +244,21 @@ merge_masked_voronoi <- function(towers, voronoi, mask) {
     voronoi_new <- work_polys
   }
   return(voronoi_new)
+}
+
+
+# total population with and without mobile network coverage
+pop_with_coverage <- function(H, J, T) {
+  # T = total population
+  # H = housing units in coverage area
+  # J = housing units outside coverage area
+  # N = population in coverage area
+  # M = population outside coverage area
+  # phi = household size
+
+  M <- T / (1 + (H / J))
+  N <- T - M
+  phi <- N / H
+
+  return(list(M=M, N=N, phi=phi))
 }
