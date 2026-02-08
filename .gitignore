@@ -5,8 +5,9 @@ out/
 .idea/
 *.exe
 *.env
-/docs/*.pdf
-/docs/*.html
+docs/
+qgis/
+
 
 # History files
 .Rhistory
