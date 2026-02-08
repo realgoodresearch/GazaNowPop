@@ -1,1 +1,2 @@
-wd = '/home/user/git/realgoodresearch/GazaNowPop_telecoms/wd'
+# example contents for environment variables file to be stored in ./.env
+wd = '/home/user/git/realgoodresearch/GazaNowPop/wd'
