@@ -1,7 +1,7 @@
 # GazaNowPop
 > Population nowcasting for Gaza neighbourhoods using aggregated and anonymised telecommunications data
 
-This repository contains source code developed to estimate populations inside Gaza in near real-time to support international humanitarian response through the Site Management Cluster (SMC) and the Assessment and Information Management (AIM) working group led by the United Nations Office for the Coordination of Humanitarian Affairs.  
+This repository contains source code developed to estimate populations inside Gaza in near real-time to support international humanitarian response led by the United Nations Office for the Coordination of Humanitarian Affairs.  
 
 ## Features
 - Data wrangling of various input data sources
