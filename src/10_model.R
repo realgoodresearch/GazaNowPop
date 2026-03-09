@@ -3,7 +3,7 @@ rm(list = ls())
 gc()
 
 #---- USER OPTIONS ----#
-reference_date <- "2026-01-25"
+reference_date <- "2026-03-01"
 max_tower_radius <- 2 # max tower radius (km)
 #----------------------#
 

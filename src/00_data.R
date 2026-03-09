@@ -31,7 +31,7 @@ out_dir <- file.path(getwd(), "out", "data")
 dir.create(out_dir, showWarnings = F, recursive = T)
 
 #---- load data ----#
-telecoms <- read.csv(file.path(in_dir, "telecoms", "telecoms_20260129.csv"))
+telecoms <- read.csv(file.path(in_dir, "telecoms", "telecoms_20260309.csv"))
 
 gov_geo <- st_read(file.path(
   in_dir,
