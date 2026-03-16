@@ -4,7 +4,7 @@ gc()
 
 #---- USER OPTIONS ----#
 baseline_date <- "2025-09-29"
-baseline_date <- "2026-01-25"
+#baseline_date <- "2026-01-25"
 reference_date <- "2026-03-01"
 #----------------------#
 
@@ -97,13 +97,24 @@ writeRaster(
 )
 
 #---- summarise by admin unit ----#
+
 # governorate
 pop_gov <- summarise_grid_per_governorate(
   pop_ras = pop_grid_delta,
   gov_poly = gov_geo,
   gov_ras = gov_grid,
   ref_date = reference_date
-)
+) %>%
+  rename(pop_change_raw = population) %>%
+  mutate(
+    pop_change = ifelse(
+      pop_change_raw < 1000,
+      round(pop_change_raw / 100) * 100,
+      round(pop_change_raw / 1000) * 1000
+    )
+  ) %>%
+  relocate(geom, .after = last_col())
+
 
 st_write(
   pop_gov,
@@ -129,7 +140,17 @@ pop_mun <- summarise_grid_per_municipality(
   mun_poly = mun_geo,
   mun_ras = mun_grid,
   ref_date = reference_date
-)
+) %>%
+  rename(pop_change_raw = population) %>%
+  mutate(
+    pop_change = ifelse(
+      pop_change_raw < 1000,
+      round(pop_change_raw / 100) * 100,
+      round(pop_change_raw / 1000) * 1000
+    )
+  ) %>%
+  relocate(geom, .after = last_col())
+
 
 st_write(
   pop_mun,
@@ -156,7 +177,17 @@ pop_nbr <- summarise_grid_per_neighbourhood(
   nbr_poly = nbr_geo,
   nbr_ras = nbr_grid,
   ref_date = reference_date
-)
+) %>%
+  rename(pop_change_raw = population) %>%
+  mutate(
+    pop_change = ifelse(
+      pop_change_raw < 1000,
+      round(pop_change_raw / 100) * 100,
+      round(pop_change_raw / 1000) * 1000
+    )
+  ) %>%
+  relocate(geom, .after = last_col())
+
 
 st_write(
   pop_nbr,

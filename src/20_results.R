@@ -52,9 +52,11 @@ nbr_grid <- rast(file.path(data_dir, "nbr_grid.tif"))
 nbr_geo <- st_read(file.path(data_dir, "nbr_geo.gpkg"))
 
 
-#---- reporting for "current" date ----#
+pop_tents <- rast(file.path(model_dir, "pop_tents.tif"))
+pop_bldgs <- rast(file.path(model_dir, "pop_bldgs.tif"))
 
-# gridded population
+#--- gridded population ---#
+
 file.copy(
   from = file.path(
     model_dir,
@@ -74,7 +76,43 @@ pop_gov <- summarise_grid_per_governorate(
   gov_poly = gov_geo,
   gov_ras = gov_grid,
   ref_date = reference_date
-)
+) %>%
+  rename(pop_raw = population) %>%
+  mutate(
+    population = ifelse(
+      pop_raw < 1000,
+      round(pop_raw / 100) * 100,
+      round(pop_raw / 1000) * 1000
+    )
+  ) %>%
+  left_join(
+    summarise_grid_per_governorate(
+      pop_ras = pop_bldgs,
+      gov_poly = gov_geo,
+      gov_ras = gov_grid,
+      ref_date = reference_date
+    ) %>%
+      rename(pop_in_bldgs = population) %>%
+      st_drop_geometry() %>%
+      select(ADM2_PCODE, pop_in_bldgs)
+  ) %>%
+  left_join(
+    summarise_grid_per_governorate(
+      pop_ras = pop_tents,
+      gov_poly = gov_geo,
+      gov_ras = gov_grid,
+      ref_date = reference_date
+    ) %>%
+      rename(pop_in_tents = population) %>%
+      st_drop_geometry() %>%
+      select(ADM2_PCODE, pop_in_tents)
+  ) %>%
+  mutate(
+    prop_in_bldgs = round(pop_in_bldgs / pop_raw, 2),
+    prop_in_tents = round(pop_in_tents / pop_raw, 2)
+  ) %>%
+  select(-pop_in_bldgs, -pop_in_tents) %>%
+  relocate(geom, .after = last_col())
 
 st_write(
   pop_gov,
@@ -102,7 +140,43 @@ pop_mun <- summarise_grid_per_municipality(
   mun_poly = mun_geo,
   mun_ras = mun_grid,
   ref_date = reference_date
-)
+) %>%
+  rename(pop_raw = population) %>%
+  mutate(
+    population = ifelse(
+      pop_raw < 1000,
+      round(pop_raw / 100) * 100,
+      round(pop_raw / 1000) * 1000
+    )
+  ) %>%
+  left_join(
+    summarise_grid_per_municipality(
+      pop_ras = pop_bldgs,
+      mun_poly = mun_geo,
+      mun_ras = mun_grid,
+      ref_date = reference_date
+    ) %>%
+      rename(pop_in_bldgs = population) %>%
+      st_drop_geometry() %>%
+      select(ADM3_PCODE, pop_in_bldgs)
+  ) %>%
+  left_join(
+    summarise_grid_per_municipality(
+      pop_ras = pop_tents,
+      mun_poly = mun_geo,
+      mun_ras = mun_grid,
+      ref_date = reference_date
+    ) %>%
+      rename(pop_in_tents = population) %>%
+      st_drop_geometry() %>%
+      select(ADM3_PCODE, pop_in_tents)
+  ) %>%
+  mutate(
+    prop_in_bldgs = round(pop_in_bldgs / pop_raw, 2),
+    prop_in_tents = round(pop_in_tents / pop_raw, 2)
+  ) %>%
+  select(-pop_in_bldgs, -pop_in_tents) %>%
+  relocate(geom, .after = last_col())
 
 st_write(
   pop_mun,
@@ -131,7 +205,43 @@ pop_nbr <- summarise_grid_per_neighbourhood(
   nbr_poly = nbr_geo,
   nbr_ras = nbr_grid,
   ref_date = reference_date
-)
+) %>%
+  rename(pop_raw = population) %>%
+  mutate(
+    population = ifelse(
+      pop_raw < 1000,
+      round(pop_raw / 100) * 100,
+      round(pop_raw / 1000) * 1000
+    )
+  ) %>%
+  left_join(
+    summarise_grid_per_neighbourhood(
+      pop_ras = pop_bldgs,
+      nbr_poly = nbr_geo,
+      nbr_ras = nbr_grid,
+      ref_date = reference_date
+    ) %>%
+      rename(pop_in_bldgs = population) %>%
+      st_drop_geometry() %>%
+      select(ADM4_PCODE, pop_in_bldgs)
+  ) %>%
+  left_join(
+    summarise_grid_per_neighbourhood(
+      pop_ras = pop_tents,
+      nbr_poly = nbr_geo,
+      nbr_ras = nbr_grid,
+      ref_date = reference_date
+    ) %>%
+      rename(pop_in_tents = population) %>%
+      st_drop_geometry() %>%
+      select(ADM4_PCODE, pop_in_tents)
+  ) %>%
+  mutate(
+    prop_in_bldgs = round(pop_in_bldgs / pop_raw, 2),
+    prop_in_tents = round(pop_in_tents / pop_raw, 2)
+  ) %>%
+  select(-pop_in_bldgs, -pop_in_tents) %>%
+  relocate(geom, .after = last_col())
 
 st_write(
   pop_nbr,
@@ -152,3 +262,5 @@ write.csv(
   ),
   row.names = F
 )
+
+rm(pop_gov, pop_mun, pop_nbr)

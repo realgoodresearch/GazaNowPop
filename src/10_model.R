@@ -396,3 +396,32 @@ population = population * (2.1e6 / sum(values(population), na.rm = T))
 plot(population)
 
 writeRaster(population, file.path(out_dir, "population.tif"), overwrite = TRUE)
+
+
+#--- derived household size and housing ---#
+
+# housing_tents <- housing_nonisolated + tents
+
+hhsize <- population / housing_tents
+
+pop_tents <- tents * hhsize
+pop_bldgs <- housing_nonisolated * hhsize
+
+# checks
+sum(pop_tents[], na.rm = T)
+sum(pop_bldgs[], na.rm = T)
+sum(pop_tents[], na.rm = T) + sum(pop_bldgs[], na.rm = T)
+
+check <- (pop_tents + pop_bldgs) - population
+summary(check[])
+
+# save to disk
+writeRaster(hhsize, file.path(out_dir, "hhsize.tif"), overwrite = TRUE)
+writeRaster(pop_tents, file.path(out_dir, "pop_tents.tif"), overwrite = TRUE)
+writeRaster(pop_bldgs, file.path(out_dir, "pop_bldgs.tif"), overwrite = TRUE)
+writeRaster(tents, file.path(out_dir, "tents.tif"), overwrite = TRUE)
+writeRaster(
+  housing_nonisolated,
+  file.path(out_dir, "housing_units.tif"),
+  overwrite = TRUE
+)

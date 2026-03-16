@@ -98,7 +98,8 @@ tent_pnts <- st_read(
     in_dir,
     "tents",
     # "UNOSAT_Gaza_IDP_Tent_points_20251212.gpkg"
-    "UNOSAT_Gaza_IDP_Tent_points_20260111.gpkg"
+    # "UNOSAT_Gaza_IDP_Tent_points_20260111.gpkg"
+    "merged_tents_202602.gpkg"
   )
 )
 
@@ -430,8 +431,14 @@ writeRaster(
 # )
 
 # tent count
+tent_vect <- tent_pnts %>%
+  filter(!sf::st_is_empty(.)) %>%
+  mutate(count = 1) %>%
+  vect() %>%
+  project(mastergrid)
+
 tents <- terra::rasterize(
-  x = tent_pnts %>% mutate(count = 1) %>% vect() %>% project(mastergrid),
+  x = tent_vect,
   y = mastergrid,
   field = "count",
   fun = sum
