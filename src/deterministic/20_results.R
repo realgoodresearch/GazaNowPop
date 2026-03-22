@@ -22,10 +22,10 @@ source(here::here(".env"), local = env)
 dir.create(env$wd, showWarnings = F, recursive = T)
 setwd(env$wd)
 
-src_dir <- file.path(here::here(), "src")
 data_dir <- file.path(getwd(), "out", "data")
-model_dir <- file.path(getwd(), "out", "model", reference_date)
-out_dir <- file.path(getwd(), "out", "results", reference_date)
+src_dir <- file.path(here::here(), "src", "deterministic")
+model_dir <- file.path(getwd(), "out", "deterministic", "model", reference_date)
+out_dir <- file.path(getwd(), "out", "deterministic", "results", reference_date)
 
 dir.create(
   file.path(out_dir, "supplementary_data"),

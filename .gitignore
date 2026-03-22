@@ -3,11 +3,12 @@ wd/
 in/
 out/
 .idea/
-*.exe
-*.env
 docs/
 qgis/
 venv/
+*.exe
+*.env
+*.log
 
 # History files
 .Rhistory
