@@ -8,6 +8,7 @@ library(posterior)
 library(bayesplot)
 library(dplyr)
 library(here)
+library(terra)
 
 # load environment
 env <- new.env()
@@ -23,8 +24,12 @@ setwd(file.path(here::here(), "wd"))
 # directories
 out_dir <- file.path(env$wd, "out", "bayesian")
 
+# model name
+model_name <- "v0.02c"
+args <- commandArgs(trailingOnly = TRUE)
+model_name <- if (length(args) >= 1) args[[1]] else model_name
+
 #---- load data ----#
-model_name <- "v0.01a"
 fit <- readRDS(file.path(out_dir, model_name, "mcmc", "fit.rds"))
 md <- readRDS(file.path(out_dir, model_name, "mcmc", "md.rds"))
 mastergrid <- rast(file.path(env$wd, "out", "data", "mastergrid.tif"))
@@ -41,7 +46,17 @@ pars_select <- c(
   "rho2",
   "phi",
   "phi_tents",
+  paste0("phi_tents[", 1:md$G, "]"),
+  paste0("phi_housing[", 1:md$G, "]"),
+  paste0("phi_tents[", 1:md$H, "]"),
+  paste0("phi_housing[", 1:md$H, "]"),
   "phi_housing",
+  "alpha_phi_tents",
+  "sigma_nbr_phi_tents",
+  "sigma_gov_phi_tents",
+  "alpha_phi_housing",
+  "sigma_nbr_phi_housing",
+  "sigma_gov_phi_housing",
   "psi_tents",
   "psi_housing",
   "bias_tents",
