@@ -161,6 +161,57 @@ if (!is.null(covariate_names)) {
   }
 }
 
+#---- tower-level detection rates ----#
+rho1_pars <- grep("^rho1\\[", variables(draws), value = TRUE)
+rho2_pars <- grep("^rho2\\[", variables(draws), value = TRUE)
+rho_pars <- c(rho1_pars, rho2_pars)
+
+if (length(rho_pars) > 0) {
+  rho_draws <- as_draws_df(fit$draws(rho_pars)) %>%
+    select(all_of(rho_pars)) %>%
+    mutate(.draw = row_number()) %>%
+    pivot_longer(
+      cols = -.draw,
+      names_to = c("provider", "tower"),
+      names_pattern = "rho(1|2)\\[(\\d+)\\]",
+      values_to = "rho"
+    ) %>%
+    mutate(
+      provider = ifelse(provider == "1", "Provider 1", "Provider 2"),
+      tower = as.integer(tower)
+    )
+
+  rho_summary <- rho_draws %>%
+    group_by(provider, tower) %>%
+    summarise(
+      mean = mean(rho),
+      lower = quantile(rho, 0.025),
+      upper = quantile(rho, 0.975),
+      .groups = "drop"
+    )
+
+  p_rho <- ggplot(
+    rho_summary,
+    aes(x = tower, y = mean, ymin = lower, ymax = upper)
+  ) +
+    geom_pointrange() +
+    facet_wrap(~provider, scales = "free_x") +
+    labs(
+      x = "Tower index",
+      y = "Detection rate",
+      title = paste("Tower-Level Detection Rates -", model_name)
+    ) +
+    theme_minimal()
+
+  ggsave(
+    filename = file.path(model_out_dir, "tower_detection_rates.png"),
+    plot = p_rho,
+    width = 10,
+    height = 6,
+    dpi = 300
+  )
+}
+
 #---- pop raster ----#
 N_hat <- as_draws_df(draws) %>%
   select(starts_with("N[")) %>%
@@ -221,7 +272,19 @@ pred_summary <- pred_df %>%
     y_rep_lower = quantile(y_rep, 0.025),
     y_rep_upper = quantile(y_rep, 0.975),
     .groups = "drop"
+  ) %>%
+  mutate(
+    pred_obs_ratio = y_rep_mean / pmax(y_obs, 1),
+    mu_obs_ratio = mu_y / pmax(y_obs, 1),
+    overprediction = y_rep_mean - y_obs,
+    percent_error = overprediction / pmax(y_obs, 1)
   )
+
+write.csv(
+  pred_summary,
+  file.path(model_out_dir, "tower_prediction_summary.csv"),
+  row.names = FALSE
+)
 
 coverage <- mean(
   pred_summary$y_obs >= pred_summary$y_rep_lower &

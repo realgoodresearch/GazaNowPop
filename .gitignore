@@ -9,6 +9,9 @@ venv/
 *.exe
 *.env
 *.log
+src/bayesian/models/v[0-9]*
+!src/bayesian/models/*.stan
+!src/bayesian/models/*_config.R
 
 # History files
 .Rhistory
