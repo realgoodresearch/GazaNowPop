@@ -1,3 +1,6 @@
+library(terra)
+library(sf)
+
 # function to join tower attributes to voronoi polygons of coverage areas
 join_towers_to_voronoi <- function(towers, voronoi) {
   # list of which polygon contains each point

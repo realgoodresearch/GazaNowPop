@@ -129,8 +129,8 @@ model {
   kappa2 ~ lognormal(log(10), 1);
   
   // penetration
-  rho1 ~ lognormal(log(0.4), 0.1);
-  rho2 ~ lognormal(log(0.2), 0.1);
+  rho1 ~ lognormal(log(0.4), 0.5);
+  rho2 ~ lognormal(log(0.2), 0.5);
   
   // penetration
   rho1 ~ normal(0, 1);

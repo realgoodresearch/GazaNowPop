@@ -104,8 +104,8 @@ model {
   sum_N ~ lognormal(log(N_tot), 0.01 / 2);
   
   // penetration
-  rho1 ~ lognormal(log(0.4), 0.1);
-  rho2 ~ lognormal(log(0.2), 0.1);
+  rho1 ~ lognormal(log(0.4), 0.5);
+  rho2 ~ lognormal(log(0.2), 0.5);
   
   // subscibers
   kappa1 ~ lognormal(log(10), 1);

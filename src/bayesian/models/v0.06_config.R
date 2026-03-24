@@ -294,10 +294,19 @@ model_data <- function(
 
 init_generator <- function(md) {
   list(
-    rho1 = runif(1, 0.25, 0.75),
-    rho2 = runif(1, 0, 0.5),
-
-    phi_tents = runif(md$I, 0, 20),
-    phi_housing = runif(md$I, 0, 20)
+    kappa1 = exp(rnorm(1, log(10), 0.1)),
+    kappa2 = exp(rnorm(1, log(10), 0.1)),
+    rho1 = exp(rnorm(1, log(0.4), 0.1)),
+    rho2 = exp(rnorm(1, log(0.2), 0.1)),
+    alpha_phi_tents = rnorm(1, log(10), 0.1),
+    sigma_gov_phi_tents = exp(rnorm(1, log(0.05), 0.1)),
+    sigma_mun_phi_tents = exp(rnorm(1, log(0.05), 0.1)),
+    z_gov_phi_tents = rnorm(md$G, 0, 0.1),
+    z_mun_phi_tents = rnorm(md$M, 0, 0.1),
+    alpha_phi_housing_offset = rnorm(1, 0, 0.1),
+    sigma_gov_phi_housing_offset = exp(rnorm(1, log(0.05), 0.1)),
+    sigma_mun_phi_housing_offset = exp(rnorm(1, log(0.05), 0.1)),
+    z_gov_phi_housing_offset = rnorm(md$G, 0, 0.1),
+    z_mun_phi_housing_offset = rnorm(md$M, 0, 0.1)
   )
 }

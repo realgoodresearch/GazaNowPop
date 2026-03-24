@@ -117,8 +117,8 @@ model {
   kappa2 ~ lognormal(log(10), 1);
   
   // penetration
-  rho1 ~ lognormal(log(0.4), 0.1);
-  rho2 ~ lognormal(log(0.2), 0.1);
+  rho1 ~ lognormal(log(0.4), 0.5);
+  rho2 ~ lognormal(log(0.2), 0.5);
   
   // people per unit
   alpha_phi_tents ~ normal(log(10), 1);
@@ -131,7 +131,7 @@ model {
   z_gov_phi_housing_offset ~ std_normal();
   z_mun_phi_housing_offset ~ std_normal();
   sigma_gov_phi_housing_offset ~ normal(0, 0.1);
-  sigma_mun_phi_housing_offset ~ normal(0, 0.05);
+  sigma_mun_phi_housing_offset ~ normal(0, 0.1);
 }
 generated quantities {
   array[J1] int y1_rep; // posterior predictive for number of active subscribers on each tower
