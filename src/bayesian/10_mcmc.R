@@ -16,7 +16,7 @@ dir.create(env$wd, showWarnings = F, recursive = T)
 setwd(env$wd)
 
 # model name
-model_name <- "v0.01a"
+model_name <- "v0.03"
 args <- commandArgs(trailingOnly = TRUE)
 model_name <- if (length(args) >= 1) args[[1]] else model_name
 

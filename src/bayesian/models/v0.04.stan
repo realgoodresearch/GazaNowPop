@@ -11,6 +11,8 @@ data {
   array[I] int<lower=1, upper=H> hh; // neighbourhood of each grid
   array[I] int<lower=0, upper=J1> jj1; // tower 1 coverage area of each grid
   array[I] int<lower=0, upper=J2> jj2; // tower 2 coverage area of each grid
+  array[M] int<lower=1, upper=G> gov_of_mun; // governorate of each municipality
+  array[H] int<lower=1, upper=M> mun_of_nbr; // municipality of each neighbourhood
   array[G] int<lower=0> I_g; // number of grids in each region
   array[M] int<lower=0> I_m; // number of grids in each region
   array[H] int<lower=0> I_h; // number of grids in each region
@@ -35,30 +37,33 @@ parameters {
   
   real alpha_phi_tents; // log people per tent (intercept)
   real<lower=0> sigma_gov_phi_tents; // log people per tent (governorate effects)
+  real<lower=0> sigma_mun_phi_tents; // log people per tent (municipality effects)
   vector[G] z_gov_phi_tents; // log people per tent (governorate effects)
+  vector[M] z_mun_phi_tents; // log people per tent (municipality effects)
   
-  real alpha_phi_housing; // log people per housing unit (intercept)
-  real<lower=0> sigma_gov_phi_housing; // log people per housing unit (governorate effects)
-  vector[G] z_gov_phi_housing; // log people per housing unit (governorate effects)
+  real alpha_phi_housing_offset; // offset from log people per tent to log people per housing unit (intercept)
 }
 transformed parameters {
   // people per tent
   vector[G] gov_phi_tents; // (governorate effects)
   gov_phi_tents = sigma_gov_phi_tents * z_gov_phi_tents;
   
-  vector<lower=0>[G] phi_tents; // log people per tent
-  phi_tents = exp(alpha_phi_tents + gov_phi_tents);
+  vector[M] mun_phi_tents; // (municipality effects)
+  for (m in 1 : M) {
+    mun_phi_tents[m] = gov_phi_tents[gov_of_mun[m]]
+                       + sigma_mun_phi_tents * z_mun_phi_tents[m];
+  }
+  
+  vector<lower=0>[I] phi_tents; // log people per tent
+  phi_tents = exp(alpha_phi_tents + mun_phi_tents[mm]);
   
   // people per housing unit
-  vector[G] gov_phi_housing; // (governorate effects)
-  gov_phi_housing = sigma_gov_phi_housing * z_gov_phi_housing;
-  
-  vector<lower=0>[G] phi_housing; // log people per housing unit 
-  phi_housing = exp(alpha_phi_housing + gov_phi_housing);
+  vector<lower=0>[I] phi_housing; // log people per housing unit 
+  phi_housing = phi_tents * exp(alpha_phi_housing_offset);
   
   // population in each grid
   vector<lower=0>[I] N;
-  N = tents .* phi_tents[gg] + housing .* phi_housing[gg];
+  N = tents .* phi_tents + housing .* phi_housing;
   
   // total population size
   real<lower=0> sum_N;
@@ -94,14 +99,18 @@ model {
   kappa1 ~ lognormal(log(10), 1);
   kappa2 ~ lognormal(log(10), 1);
   
+  // penetration
+  rho1 ~ lognormal(log(0.4), 0.1);
+  rho2 ~ lognormal(log(0.2), 0.1);
+  
   // people per unit
   alpha_phi_tents ~ normal(log(10), 1);
   z_gov_phi_tents ~ std_normal();
-  sigma_gov_phi_tents ~ normal(0, 0.5);
+  z_mun_phi_tents ~ std_normal();
+  sigma_gov_phi_tents ~ normal(0, 0.1);
+  sigma_mun_phi_tents ~ normal(0, 0.1);
   
-  alpha_phi_housing ~ normal(log(10), 1);
-  z_gov_phi_housing ~ std_normal();
-  sigma_gov_phi_housing ~ normal(0, 0.5);
+  alpha_phi_housing_offset ~ normal(0, 0.5);
 }
 generated quantities {
   array[J1] int y1_rep; // posterior predictive for number of active subscribers on each tower

@@ -33,32 +33,12 @@ parameters {
   real<lower=0> rho1; // detection rate (penetration rate) for provider 1
   real<lower=0> rho2; // detection rate (penetration rate) for provider 2
   
-  real alpha_phi_tents; // log people per tent (intercept)
-  real<lower=0> sigma_gov_phi_tents; // log people per tent (governorate effects)
-  vector[G] z_gov_phi_tents; // log people per tent (governorate effects)
-  
-  real alpha_phi_housing; // log people per housing unit (intercept)
-  real<lower=0> sigma_gov_phi_housing; // log people per housing unit (governorate effects)
-  vector[G] z_gov_phi_housing; // log people per housing unit (governorate effects)
+  real<lower=0> phi; // people per tent/housing unit (assume the same for both)
 }
 transformed parameters {
-  // people per tent
-  vector[G] gov_phi_tents; // (governorate effects)
-  gov_phi_tents = sigma_gov_phi_tents * z_gov_phi_tents;
-  
-  vector<lower=0>[G] phi_tents; // log people per tent
-  phi_tents = exp(alpha_phi_tents + gov_phi_tents);
-  
-  // people per housing unit
-  vector[G] gov_phi_housing; // (governorate effects)
-  gov_phi_housing = sigma_gov_phi_housing * z_gov_phi_housing;
-  
-  vector<lower=0>[G] phi_housing; // log people per housing unit 
-  phi_housing = exp(alpha_phi_housing + gov_phi_housing);
-  
   // population in each grid
   vector<lower=0>[I] N;
-  N = tents .* phi_tents[gg] + housing .* phi_housing[gg];
+  N = (tents + housing) * phi;
   
   // total population size
   real<lower=0> sum_N;
@@ -95,13 +75,7 @@ model {
   kappa2 ~ lognormal(log(10), 1);
   
   // people per unit
-  alpha_phi_tents ~ normal(log(10), 1);
-  z_gov_phi_tents ~ std_normal();
-  sigma_gov_phi_tents ~ normal(0, 0.5);
-  
-  alpha_phi_housing ~ normal(log(10), 1);
-  z_gov_phi_housing ~ std_normal();
-  sigma_gov_phi_housing ~ normal(0, 0.5);
+  phi ~ lognormal(log(1), 0.5);
 }
 generated quantities {
   array[J1] int y1_rep; // posterior predictive for number of active subscribers on each tower

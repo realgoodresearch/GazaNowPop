@@ -133,7 +133,7 @@ mean(unique(gov_geo$id) %in% gov_grid[])
 writeRaster(gov_grid, file.path(out_dir, "gov_grid.tif"), overwrite = TRUE)
 st_write(gov_geo, file.path(out_dir, "gov_geo.gpkg"), append = FALSE)
 write.csv(
-  as.data.frame(gov_geo),
+  as.data.frame(st_drop_geometry(gov_geo)),
   file.path(out_dir, "gov_geo.csv"),
   row.names = FALSE
 )
@@ -164,7 +164,7 @@ sort(mun_geo$id)
 writeRaster(mun_grid, file.path(out_dir, "mun_grid.tif"), overwrite = TRUE)
 st_write(mun_geo, file.path(out_dir, "mun_geo.gpkg"), append = FALSE)
 write.csv(
-  as.data.frame(mun_geo),
+  as.data.frame(st_drop_geometry(mun_geo)),
   file.path(out_dir, "mun_geo.csv"),
   row.names = FALSE
 )
@@ -195,7 +195,7 @@ sort(nbr_geo$id)
 writeRaster(nbr_grid, file.path(out_dir, "nbr_grid.tif"), overwrite = TRUE)
 st_write(nbr_geo, file.path(out_dir, "nbr_geo.gpkg"), append = FALSE)
 write.csv(
-  as.data.frame(nbr_geo),
+  as.data.frame(st_drop_geometry(nbr_geo)),
   file.path(out_dir, "nbr_geo.csv"),
   row.names = FALSE
 )
