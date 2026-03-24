@@ -106,9 +106,18 @@ tent_pnts <- st_read(
 #-----------------#
 
 # mastergrid
+gov_ext <- ext(vect(gov_geo))
+xmin_grid <- floor(xmin(gov_ext) / grid_size) * grid_size
+xmax_grid <- ceiling(xmax(gov_ext) / grid_size) * grid_size
+ymin_grid <- floor(ymin(gov_ext) / grid_size) * grid_size
+ymax_grid <- ceiling(ymax(gov_ext) / grid_size) * grid_size
+
 template <- rast(
-  ext(gov_geo),
-  resolution = grid_size,
+  xmin = xmin_grid,
+  xmax = xmax_grid,
+  ymin = ymin_grid,
+  ymax = ymax_grid,
+  resolution = c(grid_size, grid_size),
   crs = st_crs(gov_geo)$wkt
 )
 
@@ -325,6 +334,9 @@ dir.create(
   recursive = T
 )
 dates <- sort(unique(evac$date))
+evac_order_count <- rast(mastergrid)
+values(evac_order_count) <- 0
+names(evac_order_count) <- "evac_order_count"
 for (d in dates) {
   blocks <- evac |>
     filter(date == d) |>
@@ -332,12 +344,19 @@ for (d in dates) {
     pull()
   ras <- mastergrid
   ras[ras == 1 & !evac_grid %in% blocks] <- 0
+  evac_order_count <- evac_order_count + ras
   writeRaster(
     ras,
     file.path(out_dir, "evacuation_orders", paste0("evac_", d, ".tif")),
     overwrite = T
   )
 }
+
+writeRaster(
+  evac_order_count,
+  file.path(out_dir, "evac_order_count.tif"),
+  overwrite = TRUE
+)
 
 #---- building damage ----#
 
@@ -449,5 +468,119 @@ plot(tents)
 writeRaster(
   tents,
   filename = file.path(out_dir, "tent_count.tif"),
+  overwrite = TRUE
+)
+
+#---- covariates ----#
+
+focal_window <- focalMat(mastergrid, d = 500, type = "circle")
+
+# fill non-observed cells inside the AOI with zeros before focal summaries
+housing_cov <- ifel(mastergrid == 1 & is.na(housing), 0, housing)
+tents_cov <- ifel(mastergrid == 1 & is.na(tents), 0, tents)
+bldg_cover_cov <- ifel(mastergrid == 1 & is.na(bldg_coverage), 0, bldg_coverage)
+
+# building-site counts from the UNOSAT damage layer
+bldg_damage_vect <- vect(bldg_damage) %>% project(mastergrid)
+bldg_damage_vect$total_site = 1
+
+bldg_total_sites <- rasterize(
+  x = bldg_damage_vect,
+  y = mastergrid,
+  field = "total_site",
+  fun = sum,
+  background = 0
+)
+
+bldg_destroyed_sites <- rasterize(
+  x = bldg_damage_vect,
+  y = mastergrid,
+  field = "destroyed_or_severely_damaged_14",
+  fun = sum,
+  background = 0
+)
+
+# 1. proportion of buildings destroyed or severely damaged within 500 m
+bldg_total_sites_500m <- focal(
+  x = bldg_total_sites,
+  w = focal_window,
+  fun = sum,
+  na.rm = TRUE
+)
+
+bldg_destroyed_sites_500m <- focal(
+  x = bldg_destroyed_sites,
+  w = focal_window,
+  fun = sum,
+  na.rm = TRUE
+)
+
+prop_bldg_destroyed_500m <- bldg_destroyed_sites_500m / bldg_total_sites_500m
+prop_bldg_destroyed_500m[bldg_total_sites_500m == 0 & mastergrid == 1] <- 0
+names(prop_bldg_destroyed_500m) <- "prop_bldg_destroyed_500m"
+
+writeRaster(
+  prop_bldg_destroyed_500m,
+  file.path(out_dir, "prop_bldg_destroyed_500m.tif"),
+  overwrite = TRUE
+)
+
+# 2. undamaged housing units within 500 m
+housing_500m <- focal(
+  x = housing_cov,
+  w = focal_window,
+  fun = sum,
+  na.rm = TRUE
+)
+names(housing_500m) <- "housing_500m"
+
+writeRaster(
+  housing_500m,
+  file.path(out_dir, "housing_500m.tif"),
+  overwrite = TRUE
+)
+
+# 3. tents within 500 m
+tents_500m <- focal(
+  x = tents_cov,
+  w = focal_window,
+  fun = sum,
+  na.rm = TRUE
+)
+names(tents_500m) <- "tents_500m"
+
+writeRaster(
+  tents_500m,
+  file.path(out_dir, "tents_500m.tif"),
+  overwrite = TRUE
+)
+
+# 4. pre-conflict OSM building coverage within 500 m
+osm_building_coverage_500m <- focal(
+  x = bldg_cover_cov,
+  w = focal_window,
+  fun = mean,
+  na.rm = TRUE
+)
+names(osm_building_coverage_500m) <- "osm_building_coverage_500m"
+
+writeRaster(
+  osm_building_coverage_500m,
+  file.path(out_dir, "osm_building_coverage_500m.tif"),
+  overwrite = TRUE
+)
+
+# 5. mean evacuation-order count within 500 m
+evac_order_count_500m <- focal(
+  x = evac_order_count,
+  w = focal_window,
+  fun = mean,
+  na.rm = TRUE
+)
+names(evac_order_count_500m) <- "evac_order_count_500m"
+
+writeRaster(
+  evac_order_count_500m,
+  file.path(out_dir, "evac_order_count_500m.tif"),
   overwrite = TRUE
 )
