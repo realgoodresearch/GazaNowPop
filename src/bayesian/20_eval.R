@@ -95,6 +95,72 @@ dev.off()
 # mcmc_trace(draws, pars = paste0("psi_tents[", i, "]"))
 # mcmc_trace(draws, pars = paste0("psi_housing[", i, "]"))
 
+#---- covariate effects ----#
+covariate_names <- attr(md, "covariate_names")
+if (!is.null(covariate_names)) {
+  beta_tents_pars <- paste0("beta_tents[", seq_along(covariate_names), "]")
+  beta_housing_pars <- paste0("beta_housing[", seq_along(covariate_names), "]")
+  beta_pars <- c(beta_tents_pars, beta_housing_pars)
+  beta_pars <- beta_pars[beta_pars %in% variables(draws)]
+
+  if (length(beta_pars) > 0) {
+    beta_draws <- as_draws_df(fit$draws(beta_pars)) %>%
+      select(all_of(beta_pars)) %>%
+      mutate(.draw = row_number()) %>%
+      pivot_longer(
+        cols = -.draw,
+        names_to = c("process", "idx"),
+        names_pattern = "beta_(tents|housing)\\[(\\d+)\\]",
+        values_to = "value"
+      ) %>%
+      mutate(
+        idx = as.integer(idx),
+        covariate = covariate_names[idx],
+        process = ifelse(process == "tents", "Tents", "Housing")
+      )
+
+    beta_summary <- beta_draws %>%
+      group_by(process, covariate) %>%
+      summarise(
+        mean = mean(value),
+        lower = quantile(value, 0.025),
+        upper = quantile(value, 0.975),
+        .groups = "drop"
+      ) %>%
+      mutate(
+        covariate = factor(
+          covariate,
+          levels = rev(unique(covariate_names))
+        )
+      )
+
+    p_beta <- ggplot(
+      beta_summary,
+      aes(x = mean, y = covariate, xmin = lower, xmax = upper, color = process)
+    ) +
+      geom_vline(xintercept = 0, linetype = "dashed", color = "gray40") +
+      geom_pointrange(
+        position = position_dodge(width = 0.5),
+        fatten = 1.5
+      ) +
+      labs(
+        x = "Posterior mean and 95% interval",
+        y = NULL,
+        color = NULL,
+        title = paste("Covariate Effects -", model_name)
+      ) +
+      theme_minimal()
+
+    ggsave(
+      filename = file.path(model_out_dir, "covariate_effects.png"),
+      plot = p_beta,
+      width = 8,
+      height = 5,
+      dpi = 300
+    )
+  }
+}
+
 #---- pop raster ----#
 N_hat <- as_draws_df(draws) %>%
   select(starts_with("N[")) %>%
