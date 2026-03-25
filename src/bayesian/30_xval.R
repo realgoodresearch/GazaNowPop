@@ -25,7 +25,14 @@ model_name <- "v0.09"
 args <- commandArgs(trailingOnly = TRUE)
 model_name <- if (length(args) >= 1) args[[1]] else model_name
 
-cat("[", timestamp(), "] Starting cross-validation for ", model_name, "\n", sep = "")
+cat(
+  "[",
+  timestamp(),
+  "] Starting cross-validation for ",
+  model_name,
+  "\n",
+  sep = ""
+)
 
 # directories
 src_dir <- file.path(here::here(), "src", "bayesian")
@@ -38,19 +45,33 @@ dir.create(fold_out_dir, showWarnings = FALSE, recursive = TRUE)
 source(file.path(src_dir, "10_mcmc_fun.R"))
 source(file.path(src_dir, "30_xval_fun.R"))
 source(file.path(src_dir, "models", paste0(model_name, "_config.R")))
-cat("[", timestamp(), "] Loaded helpers and model config for ", model_name, "\n", sep = "")
+cat(
+  "[",
+  timestamp(),
+  "] Loaded helpers and model config for ",
+  model_name,
+  "\n",
+  sep = ""
+)
 
 # model data
-md_full <- model_data()
-md_full$N1_obs <- md_full$J1
-md_full$N2_obs <- md_full$J2
-md_full$idx1_obs <- seq_len(md_full$J1)
-md_full$idx2_obs <- seq_len(md_full$J2)
-md_full$y1_obs <- as.integer(md_full$y1)
-md_full$y2_obs <- as.integer(md_full$y2)
+md_full <- readRDS(file.path(
+  getwd(),
+  "out",
+  "bayesian",
+  model_name,
+  "mcmc",
+  "md.rds"
+))
 
-saveRDS(md_full, file = file.path(model_out_dir, "md_full.rds"))
-cat("[", timestamp(), "] Built and saved full model data for ", model_name, "\n", sep = "")
+cat(
+  "[",
+  timestamp(),
+  "] Loaded and saved full model data for ",
+  model_name,
+  "\n",
+  sep = ""
+)
 
 # cross-validation configuration
 k_folds <- 5L
@@ -59,7 +80,11 @@ warmup <- 1000L
 samples <- 1000L
 
 folds1 <- make_stratified_folds(md_full$J1, k = k_folds, seed = md_full$seed)
-folds2 <- make_stratified_folds(md_full$J2, k = k_folds, seed = md_full$seed + 1L)
+folds2 <- make_stratified_folds(
+  md_full$J2,
+  k = k_folds,
+  seed = md_full$seed + 1L
+)
 
 fold_assignments <- bind_rows(
   tibble(
@@ -93,12 +118,26 @@ write.csv(
   file.path(model_out_dir, "fold_assignments.csv"),
   row.names = FALSE
 )
-cat("[", timestamp(), "] Wrote fold assignments for ", model_name, "\n", sep = "")
+cat(
+  "[",
+  timestamp(),
+  "] Wrote fold assignments for ",
+  model_name,
+  "\n",
+  sep = ""
+)
 
 # compile the stan model once
 cat("[", timestamp(), "] Compiling Stan model for ", model_name, "\n", sep = "")
 mod <- cmdstan_model(file.path(src_dir, "models", paste0(model_name, ".stan")))
-cat("[", timestamp(), "] Finished compiling Stan model for ", model_name, "\n", sep = "")
+cat(
+  "[",
+  timestamp(),
+  "] Finished compiling Stan model for ",
+  model_name,
+  "\n",
+  sep = ""
+)
 
 oos_draws_list <- vector("list", k_folds)
 diagnostics_list <- vector("list", k_folds)
@@ -106,7 +145,16 @@ fit_paths <- character(k_folds)
 md_paths <- character(k_folds)
 
 for (fold_id in seq_len(k_folds)) {
-  cat("[", timestamp(), "] Starting fold ", fold_id, " of ", k_folds, "\n", sep = "")
+  cat(
+    "[",
+    timestamp(),
+    "] Starting fold ",
+    fold_id,
+    " of ",
+    k_folds,
+    "\n",
+    sep = ""
+  )
 
   md_fold <- add_observation_mask(
     md_full,
@@ -139,10 +187,23 @@ for (fold_id in seq_len(k_folds)) {
   )
   fit$save_object(file = fit_paths[[fold_id]])
 
-  oos_draws_list[[fold_id]] <- extract_oos_prediction_draws(fit, md_fold, fold_id)
+  oos_draws_list[[fold_id]] <- extract_oos_prediction_draws(
+    fit,
+    md_fold,
+    fold_id
+  )
   diagnostics_list[[fold_id]] <- extract_fit_diagnostics(fit, fold_id)
 
-  cat("[", timestamp(), "] Finished fold ", fold_id, " of ", k_folds, "\n", sep = "")
+  cat(
+    "[",
+    timestamp(),
+    "] Finished fold ",
+    fold_id,
+    " of ",
+    k_folds,
+    "\n",
+    sep = ""
+  )
 }
 
 oos_draws <- bind_rows(oos_draws_list)
@@ -181,7 +242,14 @@ saveRDS(
   ),
   file = file.path(model_out_dir, "xval_results.rds")
 )
-cat("[", timestamp(), "] Saved cross-validation outputs for ", model_name, "\n", sep = "")
+cat(
+  "[",
+  timestamp(),
+  "] Saved cross-validation outputs for ",
+  model_name,
+  "\n",
+  sep = ""
+)
 
 p_oos <- make_oos_plot(oos_summary, model_name)
 ggsave(
@@ -209,6 +277,20 @@ ggsave(
   height = 6,
   dpi = 300
 )
-cat("[", timestamp(), "] Wrote cross-validation plots for ", model_name, "\n", sep = "")
+cat(
+  "[",
+  timestamp(),
+  "] Wrote cross-validation plots for ",
+  model_name,
+  "\n",
+  sep = ""
+)
 
-cat("[", timestamp(), "] Finished cross-validation for ", model_name, "\n", sep = "")
+cat(
+  "[",
+  timestamp(),
+  "] Finished cross-validation for ",
+  model_name,
+  "\n",
+  sep = ""
+)

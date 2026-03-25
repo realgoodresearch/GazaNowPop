@@ -28,6 +28,7 @@ cat("[", timestamp(), "] Starting MCMC for ", model_name, "\n", sep = "")
 in_dir <- file.path(getwd(), "in")
 src_dir <- file.path(here::here(), "src", "bayesian")
 out_dir <- file.path(getwd(), "out", "bayesian", model_name, "mcmc")
+data_dir <- file.path(env$wd, "out", "data")
 dir.create(out_dir, showWarnings = F, recursive = T)
 
 # source model config
@@ -35,8 +36,40 @@ source(file.path(src_dir, "10_mcmc_fun.R"))
 source(file.path(src_dir, "models", paste0(model_name, "_config.R")))
 cat("[", timestamp(), "] Loaded model config for ", model_name, "\n", sep = "")
 
+# shared covariates applied to all models
+covariate_rasters <- list(
+  prop_bldg_destroyed = terra::rast(file.path(
+    data_dir,
+    "prop_bldg_destroyed_500m.tif"
+  )),
+  housing = terra::rast(file.path(
+    data_dir,
+    "housing_500m.tif"
+  )),
+  tents = terra::rast(file.path(
+    data_dir,
+    "tents_500m.tif"
+  )),
+  osm_building_coverage = terra::rast(file.path(
+    data_dir,
+    "osm_building_coverage_500m.tif"
+  )),
+  # flood_reports = terra::rast(file.path(
+  #   data_dir,
+  #   "flood_reports_500m.tif"
+  # )),
+  # storm_vulnerability = terra::rast(file.path(
+  #   data_dir,
+  #   "storm_vulnerability_500m.tif"
+  # )),
+  evac_order_count = terra::rast(file.path(
+    data_dir,
+    "evac_order_count_500m.tif"
+  ))
+)
+
 # model data
-md <- model_data()
+md <- model_data(covariate_rasters = covariate_rasters)
 md$N1_obs <- md$J1
 md$N2_obs <- md$J2
 md$idx1_obs <- seq_len(md$J1)
@@ -47,7 +80,14 @@ cat("[", timestamp(), "] Built model data for ", model_name, "\n", sep = "")
 
 # save model data to disk
 saveRDS(md, file = file.path(out_dir, "md.rds"))
-cat("[", timestamp(), "] Saved model data to ", file.path(out_dir, "md.rds"), "\n", sep = "")
+cat(
+  "[",
+  timestamp(),
+  "] Saved model data to ",
+  file.path(out_dir, "md.rds"),
+  "\n",
+  sep = ""
+)
 
 # MCMC configuration
 chains <- 4
@@ -58,7 +98,14 @@ inits <- lapply(1:chains, function(id) init_generator(md = md))
 # compile the stan model
 cat("[", timestamp(), "] Compiling Stan model for ", model_name, "\n", sep = "")
 mod <- cmdstan_model(file.path(src_dir, "models", paste0(model_name, ".stan")))
-cat("[", timestamp(), "] Finished compiling Stan model for ", model_name, "\n", sep = "")
+cat(
+  "[",
+  timestamp(),
+  "] Finished compiling Stan model for ",
+  model_name,
+  "\n",
+  sep = ""
+)
 
 # run MCMC
 cat("[", timestamp(), "] Starting sampling for ", model_name, "\n", sep = "")
@@ -75,6 +122,13 @@ cat("[", timestamp(), "] Finished sampling for ", model_name, "\n", sep = "")
 
 # save fitted model to disk
 fit$save_object(file = file.path(out_dir, "fit.rds"))
-cat("[", timestamp(), "] Saved fit object to ", file.path(out_dir, "fit.rds"), "\n", sep = "")
+cat(
+  "[",
+  timestamp(),
+  "] Saved fit object to ",
+  file.path(out_dir, "fit.rds"),
+  "\n",
+  sep = ""
+)
 
 cat("[", timestamp(), "] Finished MCMC for ", model_name, "\n", sep = "")

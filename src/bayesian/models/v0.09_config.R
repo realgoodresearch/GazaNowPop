@@ -38,25 +38,7 @@ model_data <- function(
   gov_geo = vect(file.path(data_dir, "gov_geo.gpkg")),
   tents = rast(file.path(data_dir, "tent_count.tif")),
   housing = rast(file.path(data_dir, "housing.tif")),
-  prop_bldg_destroyed_500m = rast(file.path(
-    data_dir,
-    "prop_bldg_destroyed_500m.tif"
-  )),
-  housing_500m = rast(file.path(data_dir, "housing_500m.tif")),
-  tents_500m = rast(file.path(data_dir, "tents_500m.tif")),
-  osm_building_coverage_500m = rast(file.path(
-    data_dir,
-    "osm_building_coverage_500m.tif"
-  )),
-  evac_order_count_500m = rast(file.path(
-    data_dir,
-    "evac_order_count_500m.tif"
-  )),
-  flood_reports_500m = rast(file.path(data_dir, "flood_reports_500m.tif")),
-  storm_vulnerability_500m = rast(file.path(
-    data_dir,
-    "storm_vulnerability_500m.tif"
-  )),
+  covariate_rasters = NULL,
   evac_buffer = rast(file.path(
     data_dir,
     "evacuation_buffers",
@@ -96,40 +78,30 @@ model_data <- function(
   housing_vect <- as.vector(housing[mastergrid_idx])
 
   #---- grid-level covariates ----#
-  covariate_names <- c(
-    "prop_bldg_destroyed_500m",
-    "housing_500m",
-    "tents_500m",
-    "osm_building_coverage_500m",
-    # "flood_reports_500m",
-    # "storm_vulnerability_500m",
-    "evac_order_count_500m"
-  )
+  if (is.null(covariate_rasters)) {
+    covariate_names <- character(0)
+    X <- matrix(0, nrow = length(tent_vect), ncol = 0)
+    storage.mode(X) <- "double"
+    covariate_means <- numeric(0)
+    covariate_sds <- numeric(0)
+  } else {
+    covariate_names <- names(covariate_rasters)
 
-  covariate_rasters <- list(
-    prop_bldg_destroyed_500m = prop_bldg_destroyed_500m,
-    housing_500m = housing_500m,
-    tents_500m = tents_500m,
-    osm_building_coverage_500m = osm_building_coverage_500m,
-    # flood_reports_500m = flood_reports_500m,
-    # storm_vulnerability_500m = storm_vulnerability_500m,
-    evac_order_count_500m = evac_order_count_500m
-  )
+    covariate_values <- lapply(covariate_rasters, function(x) {
+      as.vector(x[mastergrid_idx])
+    })
 
-  covariate_values <- lapply(covariate_rasters, function(x) {
-    as.vector(x[mastergrid_idx])
-  })
+    covariate_scaled <- lapply(covariate_values, scale_covariate)
 
-  covariate_scaled <- lapply(covariate_values, scale_covariate)
+    X <- do.call(
+      cbind,
+      lapply(covariate_scaled, function(x) x$values)
+    )
+    storage.mode(X) <- "double"
 
-  X <- do.call(
-    cbind,
-    lapply(covariate_scaled, function(x) x$values)
-  )
-  storage.mode(X) <- "double"
-
-  covariate_means <- sapply(covariate_scaled, function(x) x$mean)
-  covariate_sds <- sapply(covariate_scaled, function(x) x$sd)
+    covariate_means <- sapply(covariate_scaled, function(x) x$mean)
+    covariate_sds <- sapply(covariate_scaled, function(x) x$sd)
+  }
 
   #---- pixel-to-tower distances ----#
   grid_coords <- xyFromCell(mastergrid, mastergrid_idx_vect) %>%
