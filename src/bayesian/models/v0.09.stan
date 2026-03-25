@@ -1,3 +1,4 @@
+// v0.09: Simplifies v0.08.01 by keeping shared covariates and provider-specific distance-decaying rho but removing tower-level rho intercepts.
 data {
   int I; // number of grids
   int G; // number of governorates
@@ -5,7 +6,9 @@ data {
   int H; // number of neighbourHoods
   int J1; // number of towers from provider 1
   int J2; // number of towers from provider 2
+  int K; // number of grid-level covariates
   int N_tot; // total population size
+  real<lower=0> s_rho; // fixed distance-decay scale
   array[I] int<lower=1, upper=G> gg; // governorate of each grid
   array[I] int<lower=1, upper=M> mm; // municipality of each grid
   array[I] int<lower=1, upper=H> hh; // neighbourhood of each grid
@@ -25,6 +28,9 @@ data {
   array[J2, max(I_j2)] int<lower=0> grids_by_tower2;
   array[J1] int<lower=0> y1; // number of active subscribers on each tower
   array[J2] int<lower=0> y2; // number of active subscribers on each tower
+  matrix[J1, I] d1; // distance from provider 1 towers to grids
+  matrix[J2, I] d2; // distance from provider 2 towers to grids
+  matrix[I, K] X; // standardized grid-level covariates
   vector<lower=0>[I] tents; // number of tents in each grid
   vector<lower=0>[I] housing; // number of housing units in each grid
 }
@@ -32,32 +38,26 @@ parameters {
   real<lower=0> kappa1; // overdispersion for provider 1
   real<lower=0> kappa2; // overdispersion for provider 2
 
-  real alpha_rho1; // log detection rate intercept for provider 1
-  real alpha_rho2; // log detection rate intercept for provider 2
-  real<lower=0> sigma_rho1; // tower-level sd for provider 1 detection
-  real<lower=0> sigma_rho2; // tower-level sd for provider 2 detection
-  vector[J1] z_rho1; // tower-level detection effects for provider 1
-  vector[J2] z_rho2; // tower-level detection effects for provider 2
+  real<lower=0> rho1; // provider 1 detection rate at zero distance
+  real<lower=0> rho2; // provider 2 detection rate at zero distance
+  real<lower=0> radius_rho1; // provider 1 distance radius
+  real<lower=0> radius_rho2; // provider 2 distance radius
 
   real alpha_phi_tents; // log people per tent (intercept)
   real<lower=0> sigma_gov_phi_tents; // log people per tent (governorate effects)
   real<lower=0> sigma_mun_phi_tents; // log people per tent (municipality effects)
   vector[G] z_gov_phi_tents; // log people per tent (governorate effects)
   vector[M] z_mun_phi_tents; // log people per tent (municipality effects)
+  vector[K] beta_tents; // grid-level covariate effects on tents
 
   real alpha_phi_housing; // log people per housing unit (intercept)
   real<lower=0> sigma_gov_phi_housing; // log people per housing unit (governorate effects)
   real<lower=0> sigma_mun_phi_housing; // log people per housing unit (municipality effects)
   vector[G] z_gov_phi_housing; // log people per housing unit (governorate effects)
   vector[M] z_mun_phi_housing; // log people per housing unit (municipality effects)
+  vector[K] beta_housing; // grid-level covariate effects on housing
 }
 transformed parameters {
-  // detection rate on each tower
-  vector<lower=0>[J1] rho1;
-  vector<lower=0>[J2] rho2;
-  rho1 = exp(alpha_rho1 + sigma_rho1 * z_rho1);
-  rho2 = exp(alpha_rho2 + sigma_rho2 * z_rho2);
-
   // people per tent
   vector[G] gov_phi_tents; // (governorate effects)
   gov_phi_tents = sigma_gov_phi_tents * z_gov_phi_tents;
@@ -68,8 +68,8 @@ transformed parameters {
                        + sigma_mun_phi_tents * z_mun_phi_tents[m];
   }
 
-  vector<lower=0>[I] phi_tents; // log people per tent
-  phi_tents = exp(alpha_phi_tents + mun_phi_tents[mm]);
+  vector<lower=0>[I] phi_tents; // people per tent
+  phi_tents = exp(alpha_phi_tents + mun_phi_tents[mm] + X * beta_tents);
 
   // people per housing unit
   vector[G] gov_phi_housing; // (governorate effects)
@@ -81,8 +81,8 @@ transformed parameters {
                          + sigma_mun_phi_housing * z_mun_phi_housing[m];
   }
 
-  vector<lower=0>[I] phi_housing; // log people per housing unit
-  phi_housing = exp(alpha_phi_housing + mun_phi_housing[mm]);
+  vector<lower=0>[I] phi_housing; // people per housing unit
+  phi_housing = exp(alpha_phi_housing + mun_phi_housing[mm] + X * beta_housing);
 
   // population in each grid
   vector<lower=0>[I] N;
@@ -92,21 +92,33 @@ transformed parameters {
   real<lower=0> sum_N;
   sum_N = sum(N);
 
-  // population in each tower coverage area
+  // population in each tower coverage area with within-catchment distance decay
   vector<lower=0>[J1] N_tower1;
   vector<lower=0>[J2] N_tower2;
   for (j in 1 : J1) {
-    N_tower1[j] = sum(N[grids_by_tower1[j, 1 : I_j1[j]]]);
+    real weighted_sum = 0;
+    for (k in 1 : I_j1[j]) {
+      int i = grids_by_tower1[j, k];
+      real w = inv_logit((radius_rho1 - d1[j, i]) / s_rho);
+      weighted_sum += N[i] * w;
+    }
+    N_tower1[j] = weighted_sum;
   }
   for (j in 1 : J2) {
-    N_tower2[j] = sum(N[grids_by_tower2[j, 1 : I_j2[j]]]);
+    real weighted_sum = 0;
+    for (k in 1 : I_j2[j]) {
+      int i = grids_by_tower2[j, k];
+      real w = inv_logit((radius_rho2 - d2[j, i]) / s_rho);
+      weighted_sum += N[i] * w;
+    }
+    N_tower2[j] = weighted_sum;
   }
 
   // expected number of active subscribers on each tower
   vector[J1] mu_y1;
   vector[J2] mu_y2;
-  mu_y1 = N_tower1 .* rho1;
-  mu_y2 = N_tower2 .* rho2;
+  mu_y1 = N_tower1 * rho1;
+  mu_y2 = N_tower2 * rho2;
 }
 model {
   //--- likelihoods ---//
@@ -123,25 +135,26 @@ model {
   kappa2 ~ lognormal(log(10), 1);
 
   // penetration
-  alpha_rho1 ~ normal(log(0.4), 0.5);
-  alpha_rho2 ~ normal(log(0.2), 0.5);
-  z_rho1 ~ std_normal();
-  z_rho2 ~ std_normal();
-  sigma_rho1 ~ normal(0, 0.2);
-  sigma_rho2 ~ normal(0, 0.2);
+  rho1 ~ lognormal(log(0.4), 0.5);
+  rho2 ~ lognormal(log(0.2), 0.5);
+  radius_rho1 ~ lognormal(log(3000), 0.5);
+  radius_rho2 ~ lognormal(log(3000), 0.5);
 
-  // people per unit
+  // people per tent
   alpha_phi_tents ~ normal(log(10), 1);
   z_gov_phi_tents ~ std_normal();
   z_mun_phi_tents ~ std_normal();
   sigma_gov_phi_tents ~ normal(0, 0.1);
   sigma_mun_phi_tents ~ normal(0, 0.1);
+  beta_tents ~ normal(0, 0.5);
 
+  // people per housing unit
   alpha_phi_housing ~ normal(log(10), 1);
   z_gov_phi_housing ~ std_normal();
   z_mun_phi_housing ~ std_normal();
   sigma_gov_phi_housing ~ normal(0, 0.1);
   sigma_mun_phi_housing ~ normal(0, 0.1);
+  beta_housing ~ normal(0, 0.5);
 }
 generated quantities {
   array[J1] int y1_rep; // posterior predictive for number of active subscribers on each tower

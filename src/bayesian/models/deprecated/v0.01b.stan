@@ -1,3 +1,4 @@
+// v0.01b: Simplest shared-rate variant that forces tents and housing to use the same people-per-unit parameter.
 data {
   int I; // number of grids
   int G; // number of governorates

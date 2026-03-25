@@ -1,3 +1,4 @@
+// v0.01: Baseline model with single global people-per-unit parameters for tents and housing and provider-level detection rates.
 data {
   int I; // number of grids
   int G; // number of governorates
@@ -11,8 +12,6 @@ data {
   array[I] int<lower=1, upper=H> hh; // neighbourhood of each grid
   array[I] int<lower=0, upper=J1> jj1; // tower 1 coverage area of each grid
   array[I] int<lower=0, upper=J2> jj2; // tower 2 coverage area of each grid
-  array[M] int<lower=1, upper=G> gov_of_mun; // governorate of each municipality
-  array[H] int<lower=1, upper=M> mun_of_nbr; // municipality of each neighbourhood
   array[G] int<lower=0> I_g; // number of grids in each region
   array[M] int<lower=0> I_m; // number of grids in each region
   array[H] int<lower=0> I_h; // number of grids in each region
@@ -35,35 +34,13 @@ parameters {
   real<lower=0> rho1; // detection rate (penetration rate) for provider 1
   real<lower=0> rho2; // detection rate (penetration rate) for provider 2
   
-  real alpha_phi_tents; // log people per tent (intercept)
-  real<lower=0> sigma_gov_phi_tents; // log people per tent (governorate effects)
-  real<lower=0> sigma_mun_phi_tents; // log people per tent (municipality effects)
-  vector[G] z_gov_phi_tents; // log people per tent (governorate effects)
-  vector[M] z_mun_phi_tents; // log people per tent (municipality effects)
-  
-  real alpha_phi_housing_offset; // offset from log people per tent to log people per housing unit (intercept)
+  real<lower=0> phi_tents; // people per tent
+  real<lower=0> phi_housing; // people per housing unit
 }
 transformed parameters {
-  // people per tent
-  vector[G] gov_phi_tents; // (governorate effects)
-  gov_phi_tents = sigma_gov_phi_tents * z_gov_phi_tents;
-  
-  vector[M] mun_phi_tents; // (municipality effects)
-  for (m in 1 : M) {
-    mun_phi_tents[m] = gov_phi_tents[gov_of_mun[m]]
-                       + sigma_mun_phi_tents * z_mun_phi_tents[m];
-  }
-  
-  vector<lower=0>[I] phi_tents; // log people per tent
-  phi_tents = exp(alpha_phi_tents + mun_phi_tents[mm]);
-  
-  // people per housing unit
-  vector<lower=0>[I] phi_housing; // log people per housing unit 
-  phi_housing = phi_tents * exp(alpha_phi_housing_offset);
-  
   // population in each grid
   vector<lower=0>[I] N;
-  N = tents .* phi_tents + housing .* phi_housing;
+  N = tents * phi_tents + housing * phi_housing;
   
   // total population size
   real<lower=0> sum_N;
@@ -99,18 +76,9 @@ model {
   kappa1 ~ lognormal(log(10), 1);
   kappa2 ~ lognormal(log(10), 1);
   
-  // penetration
-  rho1 ~ lognormal(log(0.4), 0.5);
-  rho2 ~ lognormal(log(0.2), 0.5);
-  
   // people per unit
-  alpha_phi_tents ~ normal(log(10), 1);
-  z_gov_phi_tents ~ std_normal();
-  z_mun_phi_tents ~ std_normal();
-  sigma_gov_phi_tents ~ normal(0, 0.1);
-  sigma_mun_phi_tents ~ normal(0, 0.1);
-  
-  alpha_phi_housing_offset ~ normal(0, 0.5);
+  phi_tents ~ lognormal(log(1), 0.5);
+  phi_housing ~ lognormal(log(1), 0.5);
 }
 generated quantities {
   array[J1] int y1_rep; // posterior predictive for number of active subscribers on each tower

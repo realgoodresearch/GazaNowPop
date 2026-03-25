@@ -1,4 +1,4 @@
-// v0.08.01: Extends v0.08 with shared grid covariates on phi_tents and phi_housing alongside tower intercepts and distance-decaying rho.
+// v0.07.01: Extends v0.07 with shared grid covariates on phi_tents and phi_housing while retaining tower-level random rho intercepts.
 data {
   int I; // number of grids
   int G; // number of governorates
@@ -8,7 +8,6 @@ data {
   int J2; // number of towers from provider 2
   int K; // number of grid-level covariates
   int N_tot; // total population size
-  real<lower=0> s_rho; // fixed distance-decay scale
   array[I] int<lower=1, upper=G> gg; // governorate of each grid
   array[I] int<lower=1, upper=M> mm; // municipality of each grid
   array[I] int<lower=1, upper=H> hh; // neighbourhood of each grid
@@ -28,8 +27,6 @@ data {
   array[J2, max(I_j2)] int<lower=0> grids_by_tower2;
   array[J1] int<lower=0> y1; // number of active subscribers on each tower
   array[J2] int<lower=0> y2; // number of active subscribers on each tower
-  matrix[J1, I] d1; // distance from provider 1 towers to grids
-  matrix[J2, I] d2; // distance from provider 2 towers to grids
   matrix[I, K] X; // standardized grid-level covariates
   vector<lower=0>[I] tents; // number of tents in each grid
   vector<lower=0>[I] housing; // number of housing units in each grid
@@ -42,8 +39,6 @@ parameters {
   real alpha_rho2; // log detection rate intercept for provider 2
   real<lower=0> sigma_rho1; // tower-level sd for provider 1 detection
   real<lower=0> sigma_rho2; // tower-level sd for provider 2 detection
-  real<lower=0> radius_rho1; // provider 1 distance radius
-  real<lower=0> radius_rho2; // provider 2 distance radius
   vector[J1] z_rho1; // tower-level detection effects for provider 1
   vector[J2] z_rho2; // tower-level detection effects for provider 2
 
@@ -62,7 +57,7 @@ parameters {
   vector[K] beta_housing; // grid-level covariate effects on housing
 }
 transformed parameters {
-  // detection rate at zero distance on each tower
+  // detection rate on each tower
   vector<lower=0>[J1] rho1;
   vector<lower=0>[J2] rho2;
   rho1 = exp(alpha_rho1 + sigma_rho1 * z_rho1);
@@ -102,26 +97,14 @@ transformed parameters {
   real<lower=0> sum_N;
   sum_N = sum(N);
 
-  // population in each tower coverage area with within-catchment distance decay
+  // population in each tower coverage area
   vector<lower=0>[J1] N_tower1;
   vector<lower=0>[J2] N_tower2;
   for (j in 1 : J1) {
-    real weighted_sum = 0;
-    for (k in 1 : I_j1[j]) {
-      int i = grids_by_tower1[j, k];
-      real w = inv_logit((radius_rho1 - d1[j, i]) / s_rho);
-      weighted_sum += N[i] * w;
-    }
-    N_tower1[j] = weighted_sum;
+    N_tower1[j] = sum(N[grids_by_tower1[j, 1 : I_j1[j]]]);
   }
   for (j in 1 : J2) {
-    real weighted_sum = 0;
-    for (k in 1 : I_j2[j]) {
-      int i = grids_by_tower2[j, k];
-      real w = inv_logit((radius_rho2 - d2[j, i]) / s_rho);
-      weighted_sum += N[i] * w;
-    }
-    N_tower2[j] = weighted_sum;
+    N_tower2[j] = sum(N[grids_by_tower2[j, 1 : I_j2[j]]]);
   }
 
   // expected number of active subscribers on each tower
@@ -151,8 +134,6 @@ model {
   z_rho2 ~ std_normal();
   sigma_rho1 ~ normal(0, 0.2);
   sigma_rho2 ~ normal(0, 0.2);
-  radius_rho1 ~ lognormal(log(3000), 0.5);
-  radius_rho2 ~ lognormal(log(3000), 0.5);
 
   // people per tent
   alpha_phi_tents ~ normal(log(10), 1);

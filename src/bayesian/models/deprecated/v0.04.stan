@@ -1,3 +1,4 @@
+// v0.04: Offset model where housing is a global multiplicative offset from tents rather than a separate housing process.
 data {
   int I; // number of grids
   int G; // number of governorates
@@ -41,11 +42,7 @@ parameters {
   vector[G] z_gov_phi_tents; // log people per tent (governorate effects)
   vector[M] z_mun_phi_tents; // log people per tent (municipality effects)
   
-  real alpha_phi_housing_offset; // global offset from tents to housing
-  real<lower=0> sigma_gov_phi_housing_offset; // governorate offset sd
-  real<lower=0> sigma_mun_phi_housing_offset; // municipality offset sd
-  vector[G] z_gov_phi_housing_offset; // governorate offset
-  vector[M] z_mun_phi_housing_offset; // municipality offset
+  real alpha_phi_housing_offset; // offset from log people per tent to log people per housing unit (intercept)
 }
 transformed parameters {
   // people per tent
@@ -61,22 +58,9 @@ transformed parameters {
   vector<lower=0>[I] phi_tents; // log people per tent
   phi_tents = exp(alpha_phi_tents + mun_phi_tents[mm]);
   
-  // housing offset from tents
-  vector[G] gov_phi_housing_offset;
-  gov_phi_housing_offset = sigma_gov_phi_housing_offset
-                           * z_gov_phi_housing_offset;
-  
-  vector[M] mun_phi_housing_offset;
-  for (m in 1 : M) {
-    mun_phi_housing_offset[m] = gov_phi_housing_offset[gov_of_mun[m]]
-                                + sigma_mun_phi_housing_offset
-                                  * z_mun_phi_housing_offset[m];
-  }
-  
   // people per housing unit
-  vector<lower=0>[I] phi_housing;
-  phi_housing = phi_tents
-                .* exp(alpha_phi_housing_offset + mun_phi_housing_offset[mm]);
+  vector<lower=0>[I] phi_housing; // log people per housing unit 
+  phi_housing = phi_tents * exp(alpha_phi_housing_offset);
   
   // population in each grid
   vector<lower=0>[I] N;
@@ -128,10 +112,6 @@ model {
   sigma_mun_phi_tents ~ normal(0, 0.1);
   
   alpha_phi_housing_offset ~ normal(0, 0.5);
-  z_gov_phi_housing_offset ~ std_normal();
-  z_mun_phi_housing_offset ~ std_normal();
-  sigma_gov_phi_housing_offset ~ normal(0, 0.1);
-  sigma_mun_phi_housing_offset ~ normal(0, 0.1);
 }
 generated quantities {
   array[J1] int y1_rep; // posterior predictive for number of active subscribers on each tower
@@ -139,6 +119,7 @@ generated quantities {
   
   for (j in 1 : J1) {
     y1_rep[j] = neg_binomial_2_rng(mu_y1[j], kappa1);
+    ;
   }
   for (j in 1 : J2) {
     y2_rep[j] = neg_binomial_2_rng(mu_y2[j], kappa2);

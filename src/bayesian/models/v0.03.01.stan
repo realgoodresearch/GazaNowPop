@@ -1,3 +1,4 @@
+// v0.03.01: Extends v0.03 with shared grid covariates on phi_tents and phi_housing, estimating separate effects for each process.
 data {
   int I; // number of grids
   int G; // number of governorates
