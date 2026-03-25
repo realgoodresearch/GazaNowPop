@@ -7,11 +7,10 @@ library(cmdstanr)
 library(posterior)
 library(here)
 
-timestamp <- function() format(Sys.time(), "%Y-%m-%d %H:%M:%S %Z")
-
 # load environment
 env <- new.env()
 source(here::here(".env"), local = env)
+source(here::here("src", "bayesian", "00_fun.R"))
 
 # working directory
 dir.create(env$wd, showWarnings = F, recursive = T)
@@ -22,7 +21,7 @@ model_name <- "v0.09"
 args <- commandArgs(trailingOnly = TRUE)
 model_name <- if (length(args) >= 1) args[[1]] else model_name
 
-cat("[", timestamp(), "] Starting MCMC for ", model_name, "\n", sep = "")
+log_message("Starting MCMC", model_name)
 
 # directories
 in_dir <- file.path(getwd(), "in")
@@ -34,7 +33,7 @@ dir.create(out_dir, showWarnings = F, recursive = T)
 # source model config
 source(file.path(src_dir, "10_mcmc_fun.R"))
 source(file.path(src_dir, "models", paste0(model_name, "_config.R")))
-cat("[", timestamp(), "] Loaded model config for ", model_name, "\n", sep = "")
+log_message("Loaded model config", model_name)
 
 # shared covariates applied to all models
 covariate_rasters <- list(
@@ -76,18 +75,11 @@ md$idx1_obs <- seq_len(md$J1)
 md$idx2_obs <- seq_len(md$J2)
 md$y1_obs <- as.integer(md$y1)
 md$y2_obs <- as.integer(md$y2)
-cat("[", timestamp(), "] Built model data for ", model_name, "\n", sep = "")
+log_message("Built model data", model_name)
 
 # save model data to disk
 saveRDS(md, file = file.path(out_dir, "md.rds"))
-cat(
-  "[",
-  timestamp(),
-  "] Saved model data to ",
-  file.path(out_dir, "md.rds"),
-  "\n",
-  sep = ""
-)
+log_message(paste0("Saved model data to ", file.path(out_dir, "md.rds")), model_name)
 
 # MCMC configuration
 chains <- 4
@@ -96,19 +88,12 @@ samples <- 1000
 inits <- lapply(1:chains, function(id) init_generator(md = md))
 
 # compile the stan model
-cat("[", timestamp(), "] Compiling Stan model for ", model_name, "\n", sep = "")
+log_message("Compiling Stan model", model_name)
 mod <- cmdstan_model(file.path(src_dir, "models", paste0(model_name, ".stan")))
-cat(
-  "[",
-  timestamp(),
-  "] Finished compiling Stan model for ",
-  model_name,
-  "\n",
-  sep = ""
-)
+log_message("Finished compiling Stan model", model_name)
 
 # run MCMC
-cat("[", timestamp(), "] Starting sampling for ", model_name, "\n", sep = "")
+log_message("Starting sampling", model_name)
 fit <- mod$sample(
   data = md,
   parallel_chains = chains,
@@ -118,17 +103,10 @@ fit <- mod$sample(
   save_warmup = TRUE,
   seed = md$seed
 )
-cat("[", timestamp(), "] Finished sampling for ", model_name, "\n", sep = "")
+log_message("Finished sampling", model_name)
 
 # save fitted model to disk
 fit$save_object(file = file.path(out_dir, "fit.rds"))
-cat(
-  "[",
-  timestamp(),
-  "] Saved fit object to ",
-  file.path(out_dir, "fit.rds"),
-  "\n",
-  sep = ""
-)
+log_message(paste0("Saved fit object to ", file.path(out_dir, "fit.rds")), model_name)
 
-cat("[", timestamp(), "] Finished MCMC for ", model_name, "\n", sep = "")
+log_message("Finished MCMC", model_name)

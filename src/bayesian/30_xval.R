@@ -10,11 +10,10 @@ library(tidyr)
 library(ggplot2)
 library(here)
 
-timestamp <- function() format(Sys.time(), "%Y-%m-%d %H:%M:%S %Z")
-
 # load environment
 env <- new.env()
 source(here::here(".env"), local = env)
+source(here::here("src", "bayesian", "00_fun.R"))
 
 # working directory
 dir.create(env$wd, showWarnings = FALSE, recursive = TRUE)
@@ -25,14 +24,7 @@ model_name <- "v0.09"
 args <- commandArgs(trailingOnly = TRUE)
 model_name <- if (length(args) >= 1) args[[1]] else model_name
 
-cat(
-  "[",
-  timestamp(),
-  "] Starting cross-validation for ",
-  model_name,
-  "\n",
-  sep = ""
-)
+log_message("Starting cross-validation", model_name)
 
 # directories
 src_dir <- file.path(here::here(), "src", "bayesian")
@@ -45,14 +37,7 @@ dir.create(fold_out_dir, showWarnings = FALSE, recursive = TRUE)
 source(file.path(src_dir, "10_mcmc_fun.R"))
 source(file.path(src_dir, "30_xval_fun.R"))
 source(file.path(src_dir, "models", paste0(model_name, "_config.R")))
-cat(
-  "[",
-  timestamp(),
-  "] Loaded helpers and model config for ",
-  model_name,
-  "\n",
-  sep = ""
-)
+log_message("Loaded helpers and model config", model_name)
 
 # model data
 md_full <- readRDS(file.path(
@@ -64,14 +49,7 @@ md_full <- readRDS(file.path(
   "md.rds"
 ))
 
-cat(
-  "[",
-  timestamp(),
-  "] Loaded and saved full model data for ",
-  model_name,
-  "\n",
-  sep = ""
-)
+log_message("Loaded full model data", model_name)
 
 # cross-validation configuration
 k_folds <- 5L
@@ -118,26 +96,12 @@ write.csv(
   file.path(model_out_dir, "fold_assignments.csv"),
   row.names = FALSE
 )
-cat(
-  "[",
-  timestamp(),
-  "] Wrote fold assignments for ",
-  model_name,
-  "\n",
-  sep = ""
-)
+log_message("Wrote fold assignments", model_name)
 
 # compile the stan model once
-cat("[", timestamp(), "] Compiling Stan model for ", model_name, "\n", sep = "")
+log_message("Compiling Stan model", model_name)
 mod <- cmdstan_model(file.path(src_dir, "models", paste0(model_name, ".stan")))
-cat(
-  "[",
-  timestamp(),
-  "] Finished compiling Stan model for ",
-  model_name,
-  "\n",
-  sep = ""
-)
+log_message("Finished compiling Stan model", model_name)
 
 oos_draws_list <- vector("list", k_folds)
 diagnostics_list <- vector("list", k_folds)
@@ -145,16 +109,7 @@ fit_paths <- character(k_folds)
 md_paths <- character(k_folds)
 
 for (fold_id in seq_len(k_folds)) {
-  cat(
-    "[",
-    timestamp(),
-    "] Starting fold ",
-    fold_id,
-    " of ",
-    k_folds,
-    "\n",
-    sep = ""
-  )
+  log_message(paste0("Starting fold ", fold_id, " of ", k_folds), model_name)
 
   md_fold <- add_observation_mask(
     md_full,
@@ -194,33 +149,12 @@ for (fold_id in seq_len(k_folds)) {
   )
   diagnostics_list[[fold_id]] <- extract_fit_diagnostics(fit, fold_id)
 
-  cat(
-    "[",
-    timestamp(),
-    "] Finished fold ",
-    fold_id,
-    " of ",
-    k_folds,
-    "\n",
-    sep = ""
-  )
+  log_message(paste0("Finished fold ", fold_id, " of ", k_folds), model_name)
 }
 
 oos_draws <- bind_rows(oos_draws_list)
-oos_summary <- summarize_prediction_draws(oos_draws)
-fold_metrics <- compute_prediction_metrics(oos_summary)
 fold_diagnostics <- bind_rows(diagnostics_list)
 
-write.csv(
-  oos_summary,
-  file.path(model_out_dir, "oos_prediction_summary.csv"),
-  row.names = FALSE
-)
-write.csv(
-  fold_metrics,
-  file.path(model_out_dir, "fold_metrics.csv"),
-  row.names = FALSE
-)
 write.csv(
   fold_diagnostics,
   file.path(model_out_dir, "fold_diagnostics.csv"),
@@ -234,63 +168,9 @@ saveRDS(
     k_folds = k_folds,
     fit_paths = fit_paths,
     md_paths = md_paths,
-    fold_assignments = fold_assignments,
-    oos_draws = oos_draws,
-    oos_summary = oos_summary,
-    fold_metrics = fold_metrics,
-    fold_diagnostics = fold_diagnostics
+    fold_assignments = fold_assignments
   ),
-  file = file.path(model_out_dir, "xval_results.rds")
+  file = file.path(model_out_dir, "xval_artifacts.rds")
 )
-cat(
-  "[",
-  timestamp(),
-  "] Saved cross-validation outputs for ",
-  model_name,
-  "\n",
-  sep = ""
-)
-
-p_oos <- make_oos_plot(oos_summary, model_name)
-ggsave(
-  filename = file.path(model_out_dir, "observed_vs_oos_predicted.png"),
-  plot = p_oos,
-  width = 8,
-  height = 6,
-  dpi = 300
-)
-
-p_rmse <- make_fold_metric_plot(fold_metrics, model_name)
-ggsave(
-  filename = file.path(model_out_dir, "oos_rmse_by_fold.png"),
-  plot = p_rmse,
-  width = 8,
-  height = 5,
-  dpi = 300
-)
-
-p_diag <- make_diagnostic_plot(fold_diagnostics, model_name)
-ggsave(
-  filename = file.path(model_out_dir, "fold_diagnostics.png"),
-  plot = p_diag,
-  width = 9,
-  height = 6,
-  dpi = 300
-)
-cat(
-  "[",
-  timestamp(),
-  "] Wrote cross-validation plots for ",
-  model_name,
-  "\n",
-  sep = ""
-)
-
-cat(
-  "[",
-  timestamp(),
-  "] Finished cross-validation for ",
-  model_name,
-  "\n",
-  sep = ""
-)
+log_message("Saved cross-validation artifacts", model_name)
+log_message("Finished cross-validation", model_name)

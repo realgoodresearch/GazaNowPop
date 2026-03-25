@@ -150,16 +150,16 @@ model {
   alpha_phi_tents ~ normal(log(10), 1);
   z_gov_phi_tents ~ std_normal();
   z_mun_phi_tents ~ std_normal();
-  sigma_gov_phi_tents ~ normal(0, 0.1);
-  sigma_mun_phi_tents ~ normal(0, 0.1);
+  sigma_gov_phi_tents ~ student_t(4, 0, 0.3);
+  sigma_mun_phi_tents ~ student_t(4, 0, 0.3);
   beta_tents ~ normal(0, 0.5);
 
   // people per housing unit
   alpha_phi_housing ~ normal(log(10), 1);
   z_gov_phi_housing ~ std_normal();
   z_mun_phi_housing ~ std_normal();
-  sigma_gov_phi_housing ~ normal(0, 0.1);
-  sigma_mun_phi_housing ~ normal(0, 0.1);
+  sigma_gov_phi_housing ~ student_t(4, 0, 0.3);
+  sigma_mun_phi_housing ~ student_t(4, 0, 0.3);
   beta_housing ~ normal(0, 0.5);
 }
 generated quantities {

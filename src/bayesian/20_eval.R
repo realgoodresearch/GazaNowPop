@@ -12,11 +12,10 @@ library(terra)
 library(tidyr)
 library(ggplot2)
 
-timestamp <- function() format(Sys.time(), "%Y-%m-%d %H:%M:%S %Z")
-
 # load environment
 env <- new.env()
 source(here::here(".env"), local = env)
+source(here::here("src", "bayesian", "00_fun.R"))
 
 # cores for parallel processing
 ncores <- 8
@@ -33,16 +32,29 @@ model_name <- "v0.01"
 args <- commandArgs(trailingOnly = TRUE)
 model_name <- if (length(args) >= 1) args[[1]] else model_name
 
-cat("[", timestamp(), "] Starting eval for ", model_name, "\n", sep = "")
+log_message("Starting eval", model_name)
 
 #---- load data ----#
 fit <- readRDS(file.path(out_dir, model_name, "mcmc", "fit.rds"))
 md <- readRDS(file.path(out_dir, model_name, "mcmc", "md.rds"))
 mastergrid <- rast(file.path(env$wd, "out", "data", "mastergrid.tif"))
-cat("[", timestamp(), "] Loaded fit, model data, and mastergrid for ", model_name, "\n", sep = "")
+log_message("Loaded fit, model data, and mastergrid", model_name)
 
 model_out_dir <- file.path(out_dir, model_name, "eval")
 dir.create(model_out_dir, showWarnings = F, recursive = T)
+
+fit_summary <- fit$summary()
+parameter_summary <- fit_summary %>%
+  filter(
+    !grepl("^(N|phi_tents|phi_housing|mu_y1|mu_y2|y1_rep|y2_rep)\\[", variable)
+  )
+
+write.csv(
+  parameter_summary,
+  file.path(model_out_dir, "parameter_summary.csv"),
+  row.names = FALSE
+)
+log_message("Wrote parameter summary", model_name)
 
 #---- traceplots ----#
 draws <- fit$draws()
@@ -90,7 +102,7 @@ for (grp in par_groups) {
 }
 
 dev.off()
-cat("[", timestamp(), "] Wrote traceplots for ", model_name, "\n", sep = "")
+log_message("Wrote traceplots", model_name)
 
 # mcmc_trace(draws, pars = "sum_N")
 # mcmc_trace(draws, pars = "phi")
@@ -164,7 +176,7 @@ if (!is.null(covariate_names)) {
       height = 5,
       dpi = 300
     )
-    cat("[", timestamp(), "] Wrote covariate effects plot for ", model_name, "\n", sep = "")
+    log_message("Wrote covariate effects plot", model_name)
   }
 }
 
@@ -223,7 +235,7 @@ if (length(rho_pars) > 0) {
     height = 6,
     dpi = 300
   )
-  cat("[", timestamp(), "] Wrote tower detection plot for ", model_name, "\n", sep = "")
+  log_message("Wrote tower detection plot", model_name)
 }
 
 #---- provider-level rho decay ----#
@@ -305,7 +317,7 @@ if (has_decay_alpha || has_decay_scalar) {
     height = 5,
     dpi = 300
   )
-  cat("[", timestamp(), "] Wrote rho decay plot for ", model_name, "\n", sep = "")
+  log_message("Wrote rho decay plot", model_name)
 }
 
 #---- pop raster ----#
@@ -322,7 +334,7 @@ writeRaster(
   file.path(model_out_dir, "N_hat.tif"),
   overwrite = TRUE
 )
-cat("[", timestamp(), "] Wrote N_hat raster for ", model_name, "\n", sep = "")
+log_message("Wrote N_hat raster", model_name)
 
 #---- in sample fit ----#
 draws_df <- as_draws_df(fit$draws(c("mu_y1", "mu_y2", "y1_rep", "y2_rep")))
@@ -392,7 +404,7 @@ write.csv(
   file.path(model_out_dir, "tower_prediction_summary.csv"),
   row.names = FALSE
 )
-cat("[", timestamp(), "] Wrote tower prediction summary for ", model_name, "\n", sep = "")
+log_message("Wrote tower prediction summary", model_name)
 
 coverage <- mean(
   pred_summary$y_obs >= pred_summary$y_rep_lower &
@@ -401,6 +413,20 @@ coverage <- mean(
 
 rmse <- sqrt(mean((pred_summary$y_rep_mean - pred_summary$y_obs)^2))
 r <- cor(pred_summary$y_obs, pred_summary$y_rep_mean)
+
+eval_metrics <- data.frame(
+  model_name = model_name,
+  rmse = rmse,
+  r = r,
+  coverage = coverage
+)
+
+write.csv(
+  eval_metrics,
+  file.path(model_out_dir, "eval_metrics.csv"),
+  row.names = FALSE
+)
+log_message("Wrote eval metrics", model_name)
 
 label_txt <- paste0(
   "RMSE = ",
@@ -444,6 +470,6 @@ ggsave(
   height = 6,
   dpi = 300
 )
-cat("[", timestamp(), "] Wrote observed vs predicted plot for ", model_name, "\n", sep = "")
+log_message("Wrote observed vs predicted plot", model_name)
 
-cat("[", timestamp(), "] Finished eval for ", model_name, "\n", sep = "")
+log_message("Finished eval", model_name)
