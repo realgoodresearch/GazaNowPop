@@ -212,6 +212,66 @@ if (length(rho_pars) > 0) {
   )
 }
 
+#---- provider-level rho decay ----#
+decay_pars <- c("alpha_rho1", "alpha_rho2", "radius_rho1", "radius_rho2")
+if (!is.null(md$s_rho) && all(decay_pars %in% variables(draws))) {
+  decay_draws <- as_draws_df(fit$draws(decay_pars)) %>%
+    select(all_of(decay_pars))
+
+  distance_grid <- seq(0, 2000, length.out = 200)
+
+  decay_curve <- bind_rows(
+    lapply(
+      c("1", "2"),
+      function(provider_id) {
+        alpha_vals <- decay_draws[[paste0("alpha_rho", provider_id)]]
+        radius_vals <- decay_draws[[paste0("radius_rho", provider_id)]]
+
+        do.call(
+          rbind,
+          lapply(
+            distance_grid,
+            function(dist) {
+              rho_vals <- exp(alpha_vals) * plogis((radius_vals - dist) / md$s_rho)
+              data.frame(
+                provider = paste("Provider", provider_id),
+                distance_m = dist,
+                mean = mean(rho_vals),
+                lower = quantile(rho_vals, 0.025),
+                upper = quantile(rho_vals, 0.975)
+              )
+            }
+          )
+        )
+      }
+    )
+  )
+
+  p_decay <- ggplot(
+    decay_curve,
+    aes(x = distance_m, y = mean, ymin = lower, ymax = upper, color = provider, fill = provider)
+  ) +
+    geom_ribbon(alpha = 0.15, color = NA) +
+    geom_line(linewidth = 1) +
+    scale_x_continuous(limits = c(0, 2000)) +
+    labs(
+      x = "Distance from tower (m)",
+      y = "Detection rate",
+      color = NULL,
+      fill = NULL,
+      title = paste("Provider-Level Rho Decay -", model_name)
+    ) +
+    theme_minimal()
+
+  ggsave(
+    filename = file.path(model_out_dir, "rho_decay_curves.png"),
+    plot = p_decay,
+    width = 8,
+    height = 5,
+    dpi = 300
+  )
+}
+
 #---- pop raster ----#
 N_hat <- as_draws_df(draws) %>%
   select(starts_with("N[")) %>%
