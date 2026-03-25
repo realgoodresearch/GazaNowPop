@@ -137,8 +137,8 @@ model {
   // penetration
   rho1 ~ lognormal(log(0.4), 0.5);
   rho2 ~ lognormal(log(0.2), 0.5);
-  radius_rho1 ~ lognormal(log(2000), 0.25);
-  radius_rho2 ~ lognormal(log(2000), 0.25);
+  radius_rho1 ~ lognormal(log(3000), 0.5);
+  radius_rho2 ~ lognormal(log(3000), 0.5);
 
   // people per tent
   alpha_phi_tents ~ normal(log(10), 1);

@@ -43,6 +43,11 @@ model_data <- function(
   tents_500m = rast(file.path(data_dir, "tents_500m.tif")),
   osm_building_coverage_500m = rast(file.path(data_dir, "osm_building_coverage_500m.tif")),
   evac_order_count_500m = rast(file.path(data_dir, "evac_order_count_500m.tif")),
+  flood_reports_500m = rast(file.path(data_dir, "flood_reports_500m.tif")),
+  storm_vulnerability_500m = rast(file.path(
+    data_dir,
+    "storm_vulnerability_500m.tif"
+  )),
   evac_buffer = rast(file.path(
     data_dir,
     "evacuation_buffers",
@@ -87,7 +92,9 @@ model_data <- function(
     "housing_500m",
     "tents_500m",
     "osm_building_coverage_500m",
-    "evac_order_count_500m"
+    "evac_order_count_500m",
+    "flood_reports_500m",
+    "storm_vulnerability_500m"
   )
 
   covariate_rasters <- list(
@@ -95,7 +102,9 @@ model_data <- function(
     housing_500m = housing_500m,
     tents_500m = tents_500m,
     osm_building_coverage_500m = osm_building_coverage_500m,
-    evac_order_count_500m = evac_order_count_500m
+    evac_order_count_500m = evac_order_count_500m,
+    flood_reports_500m = flood_reports_500m,
+    storm_vulnerability_500m = storm_vulnerability_500m
   )
 
   covariate_values <- lapply(covariate_rasters, function(x) {
