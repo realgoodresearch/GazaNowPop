@@ -38,11 +38,25 @@ model_data <- function(
   gov_geo = vect(file.path(data_dir, "gov_geo.gpkg")),
   tents = rast(file.path(data_dir, "tent_count.tif")),
   housing = rast(file.path(data_dir, "housing.tif")),
-  prop_bldg_destroyed_500m = rast(file.path(data_dir, "prop_bldg_destroyed_500m.tif")),
+  prop_bldg_destroyed_500m = rast(file.path(
+    data_dir,
+    "prop_bldg_destroyed_500m.tif"
+  )),
   housing_500m = rast(file.path(data_dir, "housing_500m.tif")),
   tents_500m = rast(file.path(data_dir, "tents_500m.tif")),
-  osm_building_coverage_500m = rast(file.path(data_dir, "osm_building_coverage_500m.tif")),
-  evac_order_count_500m = rast(file.path(data_dir, "evac_order_count_500m.tif")),
+  osm_building_coverage_500m = rast(file.path(
+    data_dir,
+    "osm_building_coverage_500m.tif"
+  )),
+  evac_order_count_500m = rast(file.path(
+    data_dir,
+    "evac_order_count_500m.tif"
+  )),
+  flood_reports_500m = rast(file.path(data_dir, "flood_reports_500m.tif")),
+  storm_vulnerability_500m = rast(file.path(
+    data_dir,
+    "storm_vulnerability_500m.tif"
+  )),
   evac_buffer = rast(file.path(
     data_dir,
     "evacuation_buffers",
@@ -87,7 +101,9 @@ model_data <- function(
     "housing_500m",
     "tents_500m",
     "osm_building_coverage_500m",
-    "evac_order_count_500m"
+    "evac_order_count_500m",
+    "flood_reports_500m",
+    "storm_vulnerability_500m"
   )
 
   covariate_rasters <- list(
@@ -95,7 +111,9 @@ model_data <- function(
     housing_500m = housing_500m,
     tents_500m = tents_500m,
     osm_building_coverage_500m = osm_building_coverage_500m,
-    evac_order_count_500m = evac_order_count_500m
+    evac_order_count_500m = evac_order_count_500m,
+    flood_reports_500m = flood_reports_500m,
+    storm_vulnerability_500m = storm_vulnerability_500m
   )
 
   covariate_values <- lapply(covariate_rasters, function(x) {
@@ -168,6 +186,52 @@ model_data <- function(
   towers1_voronoi <- join_towers_to_voronoi(towers1_geo, voronoi1)
   towers2_voronoi <- join_towers_to_voronoi(towers2_geo, voronoi2)
 
+  towers1_voronoi <- towers1_voronoi %>%
+    mutate(provider = 1L) %>%
+    left_join(
+      telco1 %>% select(tower_id, subscribers),
+      by = "tower_id"
+    ) %>%
+    select(
+      provider,
+      tower_id,
+      tower_index,
+      site_name,
+      subscribers,
+      longitude,
+      latitude,
+      geometry
+    )
+
+  towers2_voronoi <- towers2_voronoi %>%
+    mutate(provider = 2L) %>%
+    left_join(
+      telco2 %>% select(tower_id, subscribers),
+      by = "tower_id"
+    ) %>%
+    select(
+      provider,
+      tower_id,
+      tower_index,
+      site_name,
+      subscribers,
+      longitude,
+      latitude,
+      geometry
+    )
+
+  writeVector(
+    vect(st_transform(towers1_voronoi, crs = crs(mastergrid))),
+    file.path(out_dir, "towers1_voronoi.gpkg"),
+    overwrite = TRUE
+  )
+
+  writeVector(
+    vect(st_transform(towers2_voronoi, crs = crs(mastergrid))),
+    file.path(out_dir, "towers2_voronoi.gpkg"),
+    overwrite = TRUE
+  )
+
   # tower grids
   towers1_zones <- terra::rasterize(
     x = towers1_voronoi %>%
@@ -185,6 +249,18 @@ model_data <- function(
     y = rast(mastergrid),
     field = "tower_index",
     background = NA
+  )
+
+  writeRaster(
+    towers1_zones,
+    file.path(out_dir, "towers1_zones.tif"),
+    overwrite = TRUE
+  )
+
+  writeRaster(
+    towers2_zones,
+    file.path(out_dir, "towers2_zones.tif"),
+    overwrite = TRUE
   )
 
   tower1_vect <- as.vector(towers1_zones[mastergrid_idx])
@@ -331,6 +407,8 @@ model_data <- function(
     N_tot = 2.1e6,
     y1 = round(telco1$subscribers),
     y2 = round(telco2$subscribers),
+    tower1_id = telco1$tower_id,
+    tower2_id = telco2$tower_id,
     mastergrid_idx = mastergrid_idx_vect,
     seed = seed
   )
@@ -348,8 +426,8 @@ init_generator <- function(md) {
     kappa2 = exp(rnorm(1, log(10), 0.1)),
     rho1 = exp(rnorm(1, log(0.4), 0.1)),
     rho2 = exp(rnorm(1, log(0.2), 0.1)),
-    radius_rho1 = exp(rnorm(1, log(3000), 0.1)),
-    radius_rho2 = exp(rnorm(1, log(3000), 0.1)),
+    radius_rho1 = exp(rnorm(1, log(2000), 0.1)),
+    radius_rho2 = exp(rnorm(1, log(2000), 0.1)),
     alpha_phi_tents = rnorm(1, log(10), 0.1),
     sigma_gov_phi_tents = exp(rnorm(1, log(0.05), 0.1)),
     sigma_mun_phi_tents = exp(rnorm(1, log(0.05), 0.1)),

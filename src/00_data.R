@@ -93,6 +93,18 @@ bldg_damage <- st_read(
   layer = "Damage_Sites_GazaStrip_20251011_HU"
 )
 
+flood_reports <- st_read(file.path(
+  in_dir,
+  "unosat",
+  "flood_reports.gpkg"
+))
+
+storm_vulnerability <- st_read(file.path(
+  in_dir,
+  "unosat",
+  "storm_vulnerability.gpkg"
+))
+
 tent_pnts <- st_read(
   file.path(
     in_dir,
@@ -343,7 +355,10 @@ for (d in dates) {
     select(COD_mod) |>
     pull()
   ras <- mastergrid
-  ras[ras == 1 & !evac_grid %in% blocks] <- 0
+  ras_vals <- values(ras, mat = FALSE)
+  evac_vals <- values(evac_grid, mat = FALSE)
+  ras_vals[ras_vals == 1 & is.na(base::match(evac_vals, blocks))] <- 0
+  values(ras) <- ras_vals
   evac_order_count <- evac_order_count + ras
   writeRaster(
     ras,
@@ -582,5 +597,77 @@ names(evac_order_count_500m) <- "evac_order_count_500m"
 writeRaster(
   evac_order_count_500m,
   file.path(out_dir, "evac_order_count_500m.tif"),
+  overwrite = TRUE
+)
+
+# 6. recent flood report exposure
+flood_reports_vect <- flood_reports %>%
+  st_make_valid() %>%
+  st_transform(crs = st_crs(mastergrid)) %>%
+  mutate(id = 1) %>%
+  vect()
+
+flood_reports_grid <- rasterize(
+  x = flood_reports_vect,
+  y = mastergrid,
+  field = "id",
+  background = 0,
+  touches = TRUE
+)
+names(flood_reports_grid) <- "flood_reports"
+
+writeRaster(
+  flood_reports_grid,
+  file.path(out_dir, "flood_reports.tif"),
+  overwrite = TRUE
+)
+
+flood_reports_500m <- focal(
+  x = flood_reports_grid,
+  w = focal_window,
+  fun = mean,
+  na.rm = TRUE
+)
+names(flood_reports_500m) <- "flood_reports_500m"
+
+writeRaster(
+  flood_reports_500m,
+  file.path(out_dir, "flood_reports_500m.tif"),
+  overwrite = TRUE
+)
+
+# 7. storm vulnerability exposure
+storm_vulnerability_vect <- storm_vulnerability %>%
+  st_make_valid() %>%
+  st_transform(crs = st_crs(mastergrid)) %>%
+  mutate(id = 1) %>%
+  vect()
+
+storm_vulnerability_grid <- rasterize(
+  x = storm_vulnerability_vect,
+  y = mastergrid,
+  field = "id",
+  background = 0,
+  touches = TRUE
+)
+names(storm_vulnerability_grid) <- "storm_vulnerability"
+
+writeRaster(
+  storm_vulnerability_grid,
+  file.path(out_dir, "storm_vulnerability.tif"),
+  overwrite = TRUE
+)
+
+storm_vulnerability_500m <- focal(
+  x = storm_vulnerability_grid,
+  w = focal_window,
+  fun = mean,
+  na.rm = TRUE
+)
+names(storm_vulnerability_500m) <- "storm_vulnerability_500m"
+
+writeRaster(
+  storm_vulnerability_500m,
+  file.path(out_dir, "storm_vulnerability_500m.tif"),
   overwrite = TRUE
 )

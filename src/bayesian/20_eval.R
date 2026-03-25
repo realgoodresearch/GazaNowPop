@@ -12,6 +12,8 @@ library(terra)
 library(tidyr)
 library(ggplot2)
 
+timestamp <- function() format(Sys.time(), "%Y-%m-%d %H:%M:%S %Z")
+
 # load environment
 env <- new.env()
 source(here::here(".env"), local = env)
@@ -31,10 +33,13 @@ model_name <- "v0.01"
 args <- commandArgs(trailingOnly = TRUE)
 model_name <- if (length(args) >= 1) args[[1]] else model_name
 
+cat("[", timestamp(), "] Starting eval for ", model_name, "\n", sep = "")
+
 #---- load data ----#
 fit <- readRDS(file.path(out_dir, model_name, "mcmc", "fit.rds"))
 md <- readRDS(file.path(out_dir, model_name, "mcmc", "md.rds"))
 mastergrid <- rast(file.path(env$wd, "out", "data", "mastergrid.tif"))
+cat("[", timestamp(), "] Loaded fit, model data, and mastergrid for ", model_name, "\n", sep = "")
 
 model_out_dir <- file.path(out_dir, model_name, "eval")
 dir.create(model_out_dir, showWarnings = F, recursive = T)
@@ -85,6 +90,7 @@ for (grp in par_groups) {
 }
 
 dev.off()
+cat("[", timestamp(), "] Wrote traceplots for ", model_name, "\n", sep = "")
 
 # mcmc_trace(draws, pars = "sum_N")
 # mcmc_trace(draws, pars = "phi")
@@ -158,6 +164,7 @@ if (!is.null(covariate_names)) {
       height = 5,
       dpi = 300
     )
+    cat("[", timestamp(), "] Wrote covariate effects plot for ", model_name, "\n", sep = "")
   }
 }
 
@@ -165,6 +172,8 @@ if (!is.null(covariate_names)) {
 rho1_pars <- grep("^rho1\\[", variables(draws), value = TRUE)
 rho2_pars <- grep("^rho2\\[", variables(draws), value = TRUE)
 rho_pars <- c(rho1_pars, rho2_pars)
+has_decay <- !is.null(md$s_rho) &&
+  all(c("radius_rho1", "radius_rho2") %in% variables(draws))
 
 if (length(rho_pars) > 0) {
   rho_draws <- as_draws_df(fit$draws(rho_pars)) %>%
@@ -198,8 +207,12 @@ if (length(rho_pars) > 0) {
     facet_wrap(~provider, scales = "free_x") +
     labs(
       x = "Tower index",
-      y = "Detection rate",
-      title = paste("Tower-Level Detection Rates -", model_name)
+      y = if (has_decay) "Detection rate at d = 0" else "Detection rate",
+      title = if (has_decay) {
+        paste("Tower-Level Rho Intercepts -", model_name)
+      } else {
+        paste("Tower-Level Detection Rates -", model_name)
+      }
     ) +
     theme_minimal()
 
@@ -210,29 +223,44 @@ if (length(rho_pars) > 0) {
     height = 6,
     dpi = 300
   )
+  cat("[", timestamp(), "] Wrote tower detection plot for ", model_name, "\n", sep = "")
 }
 
 #---- provider-level rho decay ----#
-decay_pars <- c("alpha_rho1", "alpha_rho2", "radius_rho1", "radius_rho2")
-if (!is.null(md$s_rho) && all(decay_pars %in% variables(draws))) {
+decay_pars_alpha <- c("alpha_rho1", "alpha_rho2", "radius_rho1", "radius_rho2")
+decay_pars_scalar <- c("rho1", "rho2", "radius_rho1", "radius_rho2")
+has_decay_alpha <- !is.null(md$s_rho) &&
+  all(decay_pars_alpha %in% variables(draws))
+has_decay_scalar <- !is.null(md$s_rho) &&
+  all(decay_pars_scalar %in% variables(draws))
+
+if (has_decay_alpha || has_decay_scalar) {
+  decay_pars <- if (has_decay_alpha) decay_pars_alpha else decay_pars_scalar
+
   decay_draws <- as_draws_df(fit$draws(decay_pars)) %>%
     select(all_of(decay_pars))
 
-  distance_grid <- seq(0, 2000, length.out = 200)
+  max_distance <- 3000
+
+  distance_grid <- seq(0, max_distance, length.out = 200)
 
   decay_curve <- bind_rows(
     lapply(
       c("1", "2"),
       function(provider_id) {
-        alpha_vals <- decay_draws[[paste0("alpha_rho", provider_id)]]
         radius_vals <- decay_draws[[paste0("radius_rho", provider_id)]]
+        rho0_vals <- if (has_decay_alpha) {
+          exp(decay_draws[[paste0("alpha_rho", provider_id)]])
+        } else {
+          decay_draws[[paste0("rho", provider_id)]]
+        }
 
         do.call(
           rbind,
           lapply(
             distance_grid,
             function(dist) {
-              rho_vals <- exp(alpha_vals) * plogis((radius_vals - dist) / md$s_rho)
+              rho_vals <- rho0_vals * plogis((radius_vals - dist) / md$s_rho)
               data.frame(
                 provider = paste("Provider", provider_id),
                 distance_m = dist,
@@ -249,11 +277,18 @@ if (!is.null(md$s_rho) && all(decay_pars %in% variables(draws))) {
 
   p_decay <- ggplot(
     decay_curve,
-    aes(x = distance_m, y = mean, ymin = lower, ymax = upper, color = provider, fill = provider)
+    aes(
+      x = distance_m,
+      y = mean,
+      ymin = lower,
+      ymax = upper,
+      color = provider,
+      fill = provider
+    )
   ) +
     geom_ribbon(alpha = 0.15, color = NA) +
     geom_line(linewidth = 1) +
-    scale_x_continuous(limits = c(0, 2000)) +
+    scale_x_continuous(limits = c(0, max_distance)) +
     labs(
       x = "Distance from tower (m)",
       y = "Detection rate",
@@ -270,6 +305,7 @@ if (!is.null(md$s_rho) && all(decay_pars %in% variables(draws))) {
     height = 5,
     dpi = 300
   )
+  cat("[", timestamp(), "] Wrote rho decay plot for ", model_name, "\n", sep = "")
 }
 
 #---- pop raster ----#
@@ -286,6 +322,7 @@ writeRaster(
   file.path(model_out_dir, "N_hat.tif"),
   overwrite = TRUE
 )
+cat("[", timestamp(), "] Wrote N_hat raster for ", model_name, "\n", sep = "")
 
 #---- in sample fit ----#
 draws_df <- as_draws_df(fit$draws(c("mu_y1", "mu_y2", "y1_rep", "y2_rep")))
@@ -300,10 +337,15 @@ pred_y1 <- draws_df %>%
   transmute(
     .draw = .draw,
     provider = 1L,
-    tower = as.integer(tower),
+    tower_index = as.integer(tower),
+    tower_id = if (!is.null(md$tower1_id)) {
+      md$tower1_id[tower_index]
+    } else {
+      tower_index
+    },
     mu_y = mu_y1,
     y_rep = y1_rep,
-    y_obs = md$y1[tower]
+    y_obs = md$y1[tower_index]
   )
 
 pred_y2 <- draws_df %>%
@@ -316,16 +358,21 @@ pred_y2 <- draws_df %>%
   transmute(
     .draw = .draw,
     provider = 2L,
-    tower = as.integer(tower),
+    tower_index = as.integer(tower),
+    tower_id = if (!is.null(md$tower2_id)) {
+      md$tower2_id[tower_index]
+    } else {
+      tower_index
+    },
     mu_y = mu_y2,
     y_rep = y2_rep,
-    y_obs = md$y2[tower]
+    y_obs = md$y2[tower_index]
   )
 
 pred_df <- bind_rows(pred_y1, pred_y2)
 
 pred_summary <- pred_df %>%
-  group_by(provider, tower, y_obs) %>%
+  group_by(provider, tower_index, tower_id, y_obs) %>%
   summarise(
     mu_y = mean(mu_y),
     y_rep_mean = mean(y_rep),
@@ -345,6 +392,7 @@ write.csv(
   file.path(model_out_dir, "tower_prediction_summary.csv"),
   row.names = FALSE
 )
+cat("[", timestamp(), "] Wrote tower prediction summary for ", model_name, "\n", sep = "")
 
 coverage <- mean(
   pred_summary$y_obs >= pred_summary$y_rep_lower &
@@ -396,3 +444,6 @@ ggsave(
   height = 6,
   dpi = 300
 )
+cat("[", timestamp(), "] Wrote observed vs predicted plot for ", model_name, "\n", sep = "")
+
+cat("[", timestamp(), "] Finished eval for ", model_name, "\n", sep = "")
