@@ -28,6 +28,12 @@ data {
   array[J2, max(I_j2)] int<lower=0> grids_by_tower2;
   array[J1] int<lower=0> y1; // number of active subscribers on each tower
   array[J2] int<lower=0> y2; // number of active subscribers on each tower
+  int<lower=0, upper=J1> N1_obs; // number of observed towers from provider 1
+  int<lower=0, upper=J2> N2_obs; // number of observed towers from provider 2
+  array[N1_obs] int<lower=1, upper=J1> idx1_obs; // observed provider 1 tower indices
+  array[N2_obs] int<lower=1, upper=J2> idx2_obs; // observed provider 2 tower indices
+  array[N1_obs] int<lower=0> y1_obs; // observed subscribers on provider 1 towers
+  array[N2_obs] int<lower=0> y2_obs; // observed subscribers on provider 2 towers
   matrix[J1, I] d1; // distance from provider 1 towers to grids
   matrix[J2, I] d2; // distance from provider 2 towers to grids
   matrix[I, K] X; // standardized grid-level covariates
@@ -122,8 +128,8 @@ transformed parameters {
 }
 model {
   //--- likelihoods ---//
-  y1 ~ neg_binomial_2(mu_y1, kappa1);
-  y2 ~ neg_binomial_2(mu_y2, kappa2);
+  y1_obs ~ neg_binomial_2(mu_y1[idx1_obs], kappa1);
+  y2_obs ~ neg_binomial_2(mu_y2[idx2_obs], kappa2);
 
   //--- priors ---//
 

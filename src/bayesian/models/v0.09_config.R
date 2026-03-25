@@ -101,9 +101,9 @@ model_data <- function(
     "housing_500m",
     "tents_500m",
     "osm_building_coverage_500m",
-    "evac_order_count_500m",
-    "flood_reports_500m",
-    "storm_vulnerability_500m"
+    # "flood_reports_500m",
+    # "storm_vulnerability_500m",
+    "evac_order_count_500m"
   )
 
   covariate_rasters <- list(
@@ -111,9 +111,9 @@ model_data <- function(
     housing_500m = housing_500m,
     tents_500m = tents_500m,
     osm_building_coverage_500m = osm_building_coverage_500m,
-    evac_order_count_500m = evac_order_count_500m,
-    flood_reports_500m = flood_reports_500m,
-    storm_vulnerability_500m = storm_vulnerability_500m
+    # flood_reports_500m = flood_reports_500m,
+    # storm_vulnerability_500m = storm_vulnerability_500m,
+    evac_order_count_500m = evac_order_count_500m
   )
 
   covariate_values <- lapply(covariate_rasters, function(x) {

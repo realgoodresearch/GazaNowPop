@@ -37,6 +37,12 @@ cat("[", timestamp(), "] Loaded model config for ", model_name, "\n", sep = "")
 
 # model data
 md <- model_data()
+md$N1_obs <- md$J1
+md$N2_obs <- md$J2
+md$idx1_obs <- seq_len(md$J1)
+md$idx2_obs <- seq_len(md$J2)
+md$y1_obs <- as.integer(md$y1)
+md$y2_obs <- as.integer(md$y2)
 cat("[", timestamp(), "] Built model data for ", model_name, "\n", sep = "")
 
 # save model data to disk
