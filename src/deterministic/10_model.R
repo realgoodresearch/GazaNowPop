@@ -26,8 +26,8 @@ setwd(env$wd)
 
 in_dir <- file.path(getwd(), "in")
 data_dir <- file.path(getwd(), "out", "data")
-src_dir <- file.path(here::here(), "src")
-out_dir <- file.path(getwd(), "out", "model", reference_date)
+src_dir <- file.path(here::here(), "src", "deterministic")
+out_dir <- file.path(getwd(), "out", "deterministic", "model", reference_date)
 dir.create(out_dir, showWarnings = F, recursive = T)
 
 # load functions
