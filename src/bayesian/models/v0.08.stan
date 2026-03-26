@@ -1,4 +1,4 @@
-// v0.08.01: Extends v0.08 with shared grid covariates on phi_tents and phi_housing alongside tower intercepts and distance-decaying rho.
+// v0.08: Extends v0.08.00 with shared grid covariates on phi_tents and phi_housing alongside tower intercepts and distance-decaying rho.
 data {
   int I; // number of grids
   int G; // number of governorates

@@ -1,3 +1,5 @@
+## Helpers shared across 3x cross-validation scripts.
+
 make_stratified_folds <- function(n, k = 5, seed = NULL) {
   if (!is.null(seed)) {
     set.seed(seed)
@@ -230,82 +232,4 @@ make_diagnostic_plot <- function(diagnostics, model_name) {
       title = paste("Cross-Validation Diagnostics -", model_name)
     ) +
     theme_minimal()
-}
-
-write_xval_results <- function(
-  model_name,
-  model_out_dir,
-  oos_draws,
-  fold_diagnostics,
-  fit_paths = character(),
-  md_paths = character(),
-  fold_assignments = tibble(),
-  k_folds = NA_integer_
-) {
-  oos_summary <- summarize_prediction_draws(oos_draws)
-  fold_metrics <- compute_prediction_metrics(oos_summary)
-
-  write.csv(
-    oos_summary,
-    file.path(model_out_dir, "oos_prediction_summary.csv"),
-    row.names = FALSE
-  )
-  write.csv(
-    fold_metrics,
-    file.path(model_out_dir, "fold_metrics.csv"),
-    row.names = FALSE
-  )
-  write.csv(
-    fold_diagnostics,
-    file.path(model_out_dir, "fold_diagnostics.csv"),
-    row.names = FALSE
-  )
-
-  saveRDS(
-    list(
-      model_name = model_name,
-      k_folds = k_folds,
-      fit_paths = fit_paths,
-      md_paths = md_paths,
-      fold_assignments = fold_assignments,
-      oos_draws = oos_draws,
-      oos_summary = oos_summary,
-      fold_metrics = fold_metrics,
-      fold_diagnostics = fold_diagnostics
-    ),
-    file = file.path(model_out_dir, "xval_results.rds")
-  )
-
-  p_oos <- make_oos_plot(oos_summary, model_name)
-  ggsave(
-    filename = file.path(model_out_dir, "observed_vs_oos_predicted.png"),
-    plot = p_oos,
-    width = 8,
-    height = 6,
-    dpi = 300
-  )
-
-  p_rmse <- make_fold_metric_plot(fold_metrics, model_name)
-  ggsave(
-    filename = file.path(model_out_dir, "oos_rmse_by_fold.png"),
-    plot = p_rmse,
-    width = 8,
-    height = 5,
-    dpi = 300
-  )
-
-  p_diag <- make_diagnostic_plot(fold_diagnostics, model_name)
-  ggsave(
-    filename = file.path(model_out_dir, "fold_diagnostics.png"),
-    plot = p_diag,
-    width = 9,
-    height = 6,
-    dpi = 300
-  )
-
-  list(
-    oos_summary = oos_summary,
-    fold_metrics = fold_metrics,
-    fold_diagnostics = fold_diagnostics
-  )
 }

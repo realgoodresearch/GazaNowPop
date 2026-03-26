@@ -261,6 +261,8 @@ model_data <- function(
     tents = tent_vect,
     housing = housing_vect,
     N_tot = 2.1e6,
+    tower1_id = telco1$tower_id,
+    tower2_id = telco2$tower_id,
     y1 = round(telco1$subscribers),
     y2 = round(telco2$subscribers),
     mastergrid_idx = which(mastergrid_idx[]),

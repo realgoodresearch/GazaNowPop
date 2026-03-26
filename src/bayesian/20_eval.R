@@ -252,7 +252,7 @@ if (has_decay_alpha || has_decay_scalar) {
   decay_draws <- as_draws_df(fit$draws(decay_pars)) %>%
     select(all_of(decay_pars))
 
-  max_distance <- 3000
+  max_distance <- 10000
 
   distance_grid <- seq(0, max_distance, length.out = 200)
 
@@ -405,6 +405,15 @@ write.csv(
   row.names = FALSE
 )
 log_message("Wrote tower prediction summary", model_name)
+
+write_tower_voronoi_predictions(
+  pred_summary = pred_summary,
+  model_name = model_name,
+  model_out_dir = model_out_dir,
+  env_wd = env$wd,
+  output_stem = "in_sample_prediction_summary"
+)
+log_message("Wrote tower in-sample prediction geopackages", model_name)
 
 coverage <- mean(
   pred_summary$y_obs >= pred_summary$y_rep_lower &

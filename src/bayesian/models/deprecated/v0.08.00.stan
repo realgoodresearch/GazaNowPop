@@ -1,4 +1,4 @@
-// v0.08: Extends v0.07 with within-Voronoi logistic distance decay so tower detection combines a tower intercept and provider-specific radius.
+// v0.08.00: Extends v0.07 with within-Voronoi logistic distance decay so tower detection combines a tower intercept and provider-specific radius.
 data {
   int I; // number of grids
   int G; // number of governorates

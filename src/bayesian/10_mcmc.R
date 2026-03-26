@@ -31,7 +31,7 @@ data_dir <- file.path(env$wd, "out", "data")
 dir.create(out_dir, showWarnings = F, recursive = T)
 
 # source model config
-source(file.path(src_dir, "10_mcmc_fun.R"))
+source(file.path(src_dir, "01_fun_mcmc.R"))
 source(file.path(src_dir, "models", paste0(model_name, "_config.R")))
 log_message("Loaded model config", model_name)
 
@@ -53,14 +53,14 @@ covariate_rasters <- list(
     data_dir,
     "osm_building_coverage_500m.tif"
   )),
-  # flood_reports = terra::rast(file.path(
-  #   data_dir,
-  #   "flood_reports_500m.tif"
-  # )),
-  # storm_vulnerability = terra::rast(file.path(
-  #   data_dir,
-  #   "storm_vulnerability_500m.tif"
-  # )),
+  flood_reports = terra::rast(file.path(
+    data_dir,
+    "flood_reports_500m.tif"
+  )),
+  storm_vulnerability = terra::rast(file.path(
+    data_dir,
+    "storm_vulnerability_500m.tif"
+  )),
   evac_order_count = terra::rast(file.path(
     data_dir,
     "evac_order_count_500m.tif"
@@ -79,7 +79,10 @@ log_message("Built model data", model_name)
 
 # save model data to disk
 saveRDS(md, file = file.path(out_dir, "md.rds"))
-log_message(paste0("Saved model data to ", file.path(out_dir, "md.rds")), model_name)
+log_message(
+  paste0("Saved model data to ", file.path(out_dir, "md.rds")),
+  model_name
+)
 
 # MCMC configuration
 chains <- 4
@@ -107,6 +110,9 @@ log_message("Finished sampling", model_name)
 
 # save fitted model to disk
 fit$save_object(file = file.path(out_dir, "fit.rds"))
-log_message(paste0("Saved fit object to ", file.path(out_dir, "fit.rds")), model_name)
+log_message(
+  paste0("Saved fit object to ", file.path(out_dir, "fit.rds")),
+  model_name
+)
 
 log_message("Finished MCMC", model_name)

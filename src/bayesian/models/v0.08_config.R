@@ -12,6 +12,20 @@ data_dir <- file.path(env$wd, "out", "data")
 # fixed distance-decay scale in meters for logistic attenuation
 s_rho <- 250
 
+scale_covariate <- function(x) {
+  x[is.na(x)] <- 0
+  mu <- mean(x)
+  s <- sd(x)
+  if (is.na(s) || s == 0) {
+    z <- x - mu
+    s <- 1
+  } else {
+    z <- (x - mu) / s
+  }
+
+  list(values = z, mean = mu, sd = s)
+}
+
 # create model data object
 model_data <- function(
   telco1 = read.csv(file.path(data_dir, "telco1.csv")),
@@ -24,6 +38,7 @@ model_data <- function(
   gov_geo = vect(file.path(data_dir, "gov_geo.gpkg")),
   tents = rast(file.path(data_dir, "tent_count.tif")),
   housing = rast(file.path(data_dir, "housing.tif")),
+  covariate_rasters = NULL,
   evac_buffer = rast(file.path(
     data_dir,
     "evacuation_buffers",
@@ -61,6 +76,32 @@ model_data <- function(
 
   tent_vect <- as.vector(tents[mastergrid_idx])
   housing_vect <- as.vector(housing[mastergrid_idx])
+
+  #---- grid-level covariates ----#
+  if (is.null(covariate_rasters)) {
+    covariate_names <- character(0)
+    X <- matrix(0, nrow = length(tent_vect), ncol = 0)
+    storage.mode(X) <- "double"
+    covariate_means <- numeric(0)
+    covariate_sds <- numeric(0)
+  } else {
+    covariate_names <- names(covariate_rasters)
+
+    covariate_values <- lapply(covariate_rasters, function(x) {
+      as.vector(x[mastergrid_idx])
+    })
+
+    covariate_scaled <- lapply(covariate_values, scale_covariate)
+
+    X <- do.call(
+      cbind,
+      lapply(covariate_scaled, function(x) x$values)
+    )
+    storage.mode(X) <- "double"
+
+    covariate_means <- sapply(covariate_scaled, function(x) x$mean)
+    covariate_sds <- sapply(covariate_scaled, function(x) x$sd)
+  }
 
   #---- pixel-to-tower distances ----#
   grid_coords <- xyFromCell(mastergrid, mastergrid_idx_vect) %>%
@@ -251,6 +292,7 @@ model_data <- function(
     H = H,
     J1 = J1,
     J2 = J2,
+    K = ncol(X),
     I_g = I_g,
     I_m = I_m,
     I_h = I_h,
@@ -270,17 +312,24 @@ model_data <- function(
     mun_of_nbr = mun_of_nbr,
     mun_ids = mun_ids,
     nbr_ids = nbr_ids,
-    tents = tent_vect,
-    housing = housing_vect,
     d1 = d1,
     d2 = d2,
+    X = X,
+    tents = tent_vect,
+    housing = housing_vect,
     s_rho = s_rho,
     N_tot = 2.1e6,
+    tower1_id = telco1$tower_id,
+    tower2_id = telco2$tower_id,
     y1 = round(telco1$subscribers),
     y2 = round(telco2$subscribers),
     mastergrid_idx = mastergrid_idx_vect,
     seed = seed
   )
+
+  attr(md, "covariate_names") <- covariate_names
+  attr(md, "covariate_means") <- covariate_means
+  attr(md, "covariate_sds") <- covariate_sds
 
   return(md)
 }
@@ -302,10 +351,12 @@ init_generator <- function(md) {
     sigma_mun_phi_tents = exp(rnorm(1, log(0.05), 0.1)),
     z_gov_phi_tents = rnorm(md$G, 0, 0.1),
     z_mun_phi_tents = rnorm(md$M, 0, 0.1),
+    beta_tents = rnorm(md$K, 0, 0.1),
     alpha_phi_housing = rnorm(1, log(10), 0.1),
     sigma_gov_phi_housing = exp(rnorm(1, log(0.05), 0.1)),
     sigma_mun_phi_housing = exp(rnorm(1, log(0.05), 0.1)),
     z_gov_phi_housing = rnorm(md$G, 0, 0.1),
-    z_mun_phi_housing = rnorm(md$M, 0, 0.1)
+    z_mun_phi_housing = rnorm(md$M, 0, 0.1),
+    beta_housing = rnorm(md$K, 0, 0.1)
   )
 }

@@ -20,7 +20,7 @@ dir.create(env$wd, showWarnings = FALSE, recursive = TRUE)
 setwd(env$wd)
 
 # model name
-model_name <- "v0.09"
+model_name <- "v0.08.01"
 args <- commandArgs(trailingOnly = TRUE)
 model_name <- if (length(args) >= 1) args[[1]] else model_name
 
@@ -34,8 +34,7 @@ dir.create(model_out_dir, showWarnings = FALSE, recursive = TRUE)
 dir.create(fold_out_dir, showWarnings = FALSE, recursive = TRUE)
 
 # source helpers and model config
-source(file.path(src_dir, "10_mcmc_fun.R"))
-source(file.path(src_dir, "30_xval_fun.R"))
+source(file.path(src_dir, "03_fun_xval.R"))
 source(file.path(src_dir, "models", paste0(model_name, "_config.R")))
 log_message("Loaded helpers and model config", model_name)
 
