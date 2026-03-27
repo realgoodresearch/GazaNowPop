@@ -132,8 +132,8 @@ compute_prediction_metrics <- function(pred_summary) {
     mutate(provider = factor(provider, levels = c(1, 2)))
 }
 
-extract_fit_diagnostics <- function(fit, fold_id) {
-  summary_df <- fit$summary()
+extract_fit_diagnostics <- function(fit, fold_id, summary_cores = 1L) {
+  summary_df <- fit$summary(.cores = summary_cores)
 
   sampler_diag <- tryCatch(
     posterior::as_draws_df(fit$sampler_diagnostics()),

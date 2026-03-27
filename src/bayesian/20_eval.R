@@ -18,7 +18,7 @@ source(here::here(".env"), local = env)
 source(here::here("src", "bayesian", "00_fun.R"))
 
 # cores for parallel processing
-ncores <- 8
+ncores <- 4
 
 # working directory
 dir.create(file.path(here::here(), "wd"), showWarnings = F, recursive = T)
@@ -28,7 +28,7 @@ setwd(file.path(here::here(), "wd"))
 out_dir <- file.path(env$wd, "out", "bayesian")
 
 # model name
-model_name <- "v0.01"
+model_name <- "v0.08"
 args <- commandArgs(trailingOnly = TRUE)
 model_name <- if (length(args) >= 1) args[[1]] else model_name
 
@@ -43,7 +43,7 @@ log_message("Loaded fit, model data, and mastergrid", model_name)
 model_out_dir <- file.path(out_dir, model_name, "eval")
 dir.create(model_out_dir, showWarnings = F, recursive = T)
 
-fit_summary <- fit$summary()
+fit_summary <- fit$summary(.cores = ncores)
 parameter_summary <- fit_summary %>%
   filter(
     !grepl("^(N|phi_tents|phi_housing|mu_y1|mu_y2|y1_rep|y2_rep)\\[", variable)
@@ -74,6 +74,8 @@ pars_select <- c(
   "sigma_nbr_phi_housing",
   "sigma_mun_phi_housing",
   "sigma_gov_phi_housing",
+  "sigma_rho1",
+  "sigma_rho2",
   paste0("gov_phi_tents[", 1:md$G, "]"),
   paste0("gov_phi_housing[", 1:md$G, "]"),
   paste0("mun_phi_tents[", 1:md$M, "]"),
@@ -406,6 +408,8 @@ write.csv(
 )
 log_message("Wrote tower prediction summary", model_name)
 
+
+# prediction accuaracy mapped to tower catchments
 write_tower_voronoi_predictions(
   pred_summary = pred_summary,
   model_name = model_name,
@@ -415,6 +419,8 @@ write_tower_voronoi_predictions(
 )
 log_message("Wrote tower in-sample prediction geopackages", model_name)
 
+
+# evaluation metrics as csv
 coverage <- mean(
   pred_summary$y_obs >= pred_summary$y_rep_lower &
     pred_summary$y_obs <= pred_summary$y_rep_upper
@@ -437,6 +443,8 @@ write.csv(
 )
 log_message("Wrote eval metrics", model_name)
 
+
+# observed vs predicted plot
 label_txt <- paste0(
   "RMSE = ",
   round(rmse, 1),

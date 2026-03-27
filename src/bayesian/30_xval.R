@@ -53,6 +53,7 @@ log_message("Loaded full model data", model_name)
 # cross-validation configuration
 k_folds <- 5L
 chains <- 4L
+concurrent_folds <- 2L
 warmup <- 1000L
 samples <- 1000L
 
@@ -102,12 +103,7 @@ log_message("Compiling Stan model", model_name)
 mod <- cmdstan_model(file.path(src_dir, "models", paste0(model_name, ".stan")))
 log_message("Finished compiling Stan model", model_name)
 
-oos_draws_list <- vector("list", k_folds)
-diagnostics_list <- vector("list", k_folds)
-fit_paths <- character(k_folds)
-md_paths <- character(k_folds)
-
-for (fold_id in seq_len(k_folds)) {
+run_fold <- function(fold_id) {
   log_message(paste0("Starting fold ", fold_id, " of ", k_folds), model_name)
 
   md_fold <- add_observation_mask(
@@ -117,11 +113,11 @@ for (fold_id in seq_len(k_folds)) {
     seed = md_full$seed + fold_id
   )
 
-  md_paths[[fold_id]] <- file.path(
+  md_path <- file.path(
     fold_out_dir,
     paste0("fold_", sprintf("%02d", fold_id), "_md.rds")
   )
-  saveRDS(md_fold, file = md_paths[[fold_id]])
+  saveRDS(md_fold, file = md_path)
 
   inits <- lapply(seq_len(chains), function(id) init_generator(md = md_fold))
 
@@ -135,21 +131,40 @@ for (fold_id in seq_len(k_folds)) {
     seed = md_fold$seed
   )
 
-  fit_paths[[fold_id]] <- file.path(
+  fit_path <- file.path(
     fold_out_dir,
     paste0("fold_", sprintf("%02d", fold_id), "_fit.rds")
   )
-  fit$save_object(file = fit_paths[[fold_id]])
+  fit$save_object(file = fit_path)
 
-  oos_draws_list[[fold_id]] <- extract_oos_prediction_draws(
+  oos_draws <- extract_oos_prediction_draws(
     fit,
     md_fold,
     fold_id
   )
-  diagnostics_list[[fold_id]] <- extract_fit_diagnostics(fit, fold_id)
+  diagnostics <- extract_fit_diagnostics(fit, fold_id, summary_cores = chains)
 
   log_message(paste0("Finished fold ", fold_id, " of ", k_folds), model_name)
+
+  list(
+    oos_draws = oos_draws,
+    diagnostics = diagnostics,
+    fit_path = fit_path,
+    md_path = md_path
+  )
 }
+
+fold_results <- parallel::mclapply(
+  seq_len(k_folds),
+  run_fold,
+  mc.cores = concurrent_folds,
+  mc.preschedule = FALSE
+)
+
+oos_draws_list <- lapply(fold_results, `[[`, "oos_draws")
+diagnostics_list <- lapply(fold_results, `[[`, "diagnostics")
+fit_paths <- vapply(fold_results, `[[`, character(1), "fit_path")
+md_paths <- vapply(fold_results, `[[`, character(1), "md_path")
 
 oos_draws <- bind_rows(oos_draws_list)
 fold_diagnostics <- bind_rows(diagnostics_list)
