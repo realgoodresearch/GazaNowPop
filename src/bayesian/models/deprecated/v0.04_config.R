@@ -1,304 +1,38 @@
-# libraries
-library(terra)
-library(dplyr)
-library(sf)
-
 seed <- round(runif(1, 0, 1e9))
 set.seed(seed)
 
-# directories
 data_dir <- file.path(env$wd, "out", "data")
 
-# load data
-# mastergrid <- rast(file.path(data_dir, "mastergrid.tif"))
-# nbr_grid <- rast(file.path(data_dir, "nbr_grid.tif"))
-# mun_grid <- rast(file.path(data_dir, "mun_grid.tif"))
-# gov_grid <- rast(file.path(data_dir, "gov_grid.tif"))
-# gov_geo <- vect(file.path(data_dir, "gov_geo.gpkg"))
-# towers1 <- vect(file.path(data_dir, "towers1_geo.gpkg"))
-# towers2 <- vect(file.path(data_dir, "towers2_geo.gpkg"))
-# telco1 <- read.csv(file.path(data_dir, "telco1.csv"))
-# telco2 <- read.csv(file.path(data_dir, "telco2.csv"))
-# tents <- rast(file.path(data_dir, "tent_count.tif"))
-# housing <- rast(file.path(data_dir, "housing.tif"))
-# evac_buffer <- rast(file.path(data_dir, "evacuation_buffers", "evac_buffer_2025-10-10.tif"))
-
-# create model data object
-model_data <- function(
-  telco1 = read.csv(file.path(data_dir, "telco1.csv")),
-  telco2 = read.csv(file.path(data_dir, "telco2.csv")),
-  towers1 = vect(file.path(data_dir, "towers1_geo.gpkg")),
-  towers2 = vect(file.path(data_dir, "towers2_geo.gpkg")),
-  mun_grid = rast(file.path(data_dir, "mun_grid.tif")),
-  nbr_grid = rast(file.path(data_dir, "nbr_grid.tif")),
-  gov_grid = rast(file.path(data_dir, "gov_grid.tif")),
-  gov_geo = vect(file.path(data_dir, "gov_geo.gpkg")),
-  tents = rast(file.path(data_dir, "tent_count.tif")),
-  housing = rast(file.path(data_dir, "housing.tif")),
-  evac_buffer = rast(file.path(
-    data_dir,
-    "evacuation_buffers",
-    "evac_buffer_2025-10-10.tif"
-  )),
-  mastergrid = rast(file.path(data_dir, "mastergrid.tif"))
-) {
-  # subset telecoms to most recent date
-  telco_date <- max(telco1$date)
-
-  telco1 <- telco1 |>
-    filter(date == telco_date) # filter(date == telco_date & subscribers > 0)
-
-  telco2 <- telco2 |>
-    filter(date == telco_date) # filter(date == telco_date & subscribers > 0)
-
-  # subset towers to those in telecoms data
-  towers1_geo <- st_as_sf(towers1) %>%
-    rename(tower_id = id) %>%
-    filter(tower_id %in% telco1$tower_id)
-  towers2_geo <- st_as_sf(towers2) %>%
-    rename(tower_id = id) %>%
-    filter(tower_id %in% telco2$tower_id)
-
-  #---- tents and housing ----#
-  tents[mastergrid == 1 & is.na(tents)] <- 0
-  housing[mastergrid == 1 & is.na(housing)] <- 0
-  evac_buffer[mastergrid == 1 & is.na(evac_buffer)] <- 0
-
-  mastergrid_idx <- mastergrid == 1 &
-    evac_buffer == 0 &
-    (tents > 0 | housing > 0)
-
-  tent_vect <- as.vector(tents[mastergrid_idx])
-  housing_vect <- as.vector(housing[mastergrid_idx])
-
-  #---- pixel-to-tower distances ----#
-  grid_coords <- as.data.frame(mastergrid, xy = TRUE)[
-    as.vector(mastergrid_idx[]),
-    c("x", "y")
-  ]
-
-  towers1_coords <- towers1_geo %>%
-    st_transform(crs = st_crs(mastergrid)) %>%
-    st_coordinates() %>%
-    as.data.frame() %>%
-    select(x = X, y = Y)
-
-  d1 <- distance(towers1_coords, grid_coords)
-
-  towers2_coords <- towers2_geo |>
-    st_transform(crs = st_crs(mastergrid)) %>%
-    st_coordinates() %>%
-    as.data.frame() %>%
-    select(x = X, y = Y)
-
-  d2 <- distance(towers2_coords, grid_coords)
-
-  #---- tower voronoi ----#
-  env <- st_union(st_as_sf(gov_geo)) %>%
-    st_make_valid() %>%
-    st_transform(crs = "EPSG: 32636")
-
-  # provider 1
-  pnt1 <- towers1_geo %>%
-    st_union() %>%
-    st_make_valid() %>%
-    st_transform(crs = "EPSG:32636")
-
-  voronoi1 <- st_voronoi(pnt1, env) %>%
-    st_collection_extract("POLYGON") %>%
-    st_sfc() %>%
-    st_intersection(env) %>%
-    st_make_valid() %>%
-    st_transform(st_crs(towers1_geo))
-
-  # provider 2
-  pnt2 <- towers2_geo %>%
-    st_union() %>%
-    st_make_valid() %>%
-    st_transform(crs = "EPSG: 32636")
-
-  voronoi2 <- st_voronoi(pnt2, env) %>%
-    st_collection_extract("POLYGON") %>%
-    st_sfc() %>%
-    st_intersection(env) %>%
-    st_make_valid() %>%
-    st_transform(st_crs(towers2_geo))
-
-  towers1_voronoi <- join_towers_to_voronoi(towers1_geo, voronoi1)
-  towers2_voronoi <- join_towers_to_voronoi(towers2_geo, voronoi2)
-
-  # tower grids
-  towers1_zones <- terra::rasterize(
-    x = towers1_voronoi %>%
-      st_transform(crs = crs(mastergrid)) %>%
-      vect(),
-    y = rast(mastergrid),
-    field = "tower_index",
-    background = NA
+model_data <- function(covariate_rasters = NULL, ...) {
+  md <- build_model_data(
+    covariate_rasters = covariate_rasters,
+    seed = seed,
+    ...
   )
 
-  towers2_zones <- terra::rasterize(
-    x = towers2_voronoi %>%
-      st_transform(crs = crs(mastergrid)) %>%
-      vect(),
-    y = rast(mastergrid),
-    field = "tower_index",
-    background = NA
+  select_md_fields(
+    md,
+    c(
+      "I", "G", "M", "H", "J1", "J2",
+      "I_g", "I_m", "I_h", "I_j1", "I_j2",
+      "grids_by_gov", "grids_by_mun", "grids_by_nbr",
+      "grids_by_tower1", "grids_by_tower2",
+      "gg", "mm", "hh", "jj1", "jj2",
+      "gov_of_mun", "mun_of_nbr",
+      "mun_ids", "nbr_ids",
+      "tents", "housing",
+      "N_tot",
+      "tower1_id", "tower2_id",
+      "y1", "y2",
+      "mastergrid_idx", "seed"
+    )
   )
-
-  tower1_vect <- as.vector(towers1_zones[mastergrid_idx])
-  tower2_vect <- as.vector(towers2_zones[mastergrid_idx])
-
-  J1 <- max(tower1_vect)
-  J2 <- max(tower2_vect)
-
-  I_j1 <- c()
-  for (j in 1:J1) {
-    I_j1[j] <- sum(tower1_vect == j)
-  }
-
-  I_j2 <- c()
-  for (j in 1:J2) {
-    I_j2[j] <- sum(tower2_vect == j)
-  }
-
-  grids_by_tower1 <- matrix(0, nrow = J1, ncol = max(I_j1))
-  for (j in 1:J1) {
-    grids_by_tower1[j, 1:I_j1[j]] <- which(tower1_vect == j)
-  }
-
-  grids_by_tower2 <- matrix(0, nrow = J2, ncol = max(I_j2))
-  for (j in 1:J2) {
-    grids_by_tower2[j, 1:I_j2[j]] <- which(tower2_vect == j)
-  }
-
-  #---- admin units ----#
-
-  # grid count per governorate
-  gov_vect <- as.vector(gov_grid[mastergrid_idx])
-  gov_ids <- sort(unique(gov_vect))
-
-  G <- length(gov_ids)
-  gov_vect_idx <- match(gov_vect, gov_ids)
-
-  I_g <- c()
-  for (g in 1:G) {
-    I_g[g] <- sum(gov_vect_idx == g)
-  }
-
-  grids_by_gov <- matrix(0, nrow = G, ncol = max(I_g))
-  for (g in 1:G) {
-    grids_by_gov[g, 1:I_g[g]] <- which(gov_vect_idx == g)
-  }
-
-  # grid count per municipality
-  mun_vect <- as.vector(mun_grid[mastergrid_idx])
-  mun_ids <- sort(unique(mun_vect))
-  M <- length(mun_ids)
-  mun_vect_idx <- match(mun_vect, mun_ids)
-
-  I_m <- c()
-  for (m in 1:M) {
-    I_m[m] <- sum(mun_vect_idx == m)
-  }
-
-  grids_by_mun <- matrix(0, nrow = M, ncol = max(I_m))
-  for (m in 1:M) {
-    grids <- which(mun_vect_idx == m)
-    if (length(grids) > 0) {
-      grids_by_mun[m, 1:I_m[m]] <- grids
-    }
-  }
-
-  gov_of_mun <- integer(M)
-  for (m in 1:M) {
-    gov_of_mun[m] <- gov_vect_idx[match(m, mun_vect_idx)]
-  }
-
-  # grid count per neighbourhood
-  nbr_vect <- as.vector(nbr_grid[mastergrid_idx])
-  nbr_ids <- sort(unique(nbr_vect))
-  nbr_vect_idx <- match(nbr_vect, nbr_ids)
-
-  H <- length(nbr_ids)
-
-  I_h <- c()
-  for (h in 1:H) {
-    I_h[h] <- sum(nbr_vect_idx == h)
-  }
-
-  grids_by_nbr <- matrix(0, nrow = H, ncol = max(I_h))
-  for (h in 1:H) {
-    grids <- which(nbr_vect_idx == h)
-    if (length(grids) > 0) {
-      grids_by_nbr[h, 1:I_h[h]] <- which(nbr_vect_idx == h)
-    }
-  }
-
-  mun_of_nbr <- integer(H)
-  for (h in 1:H) {
-    mun_of_nbr[h] <- mun_vect_idx[match(h, nbr_vect_idx)]
-  }
-
-  #---- confirm ordering for towers and subscribers ----#
-  telco1 <- telco1 %>%
-    left_join(
-      towers1_voronoi %>% st_drop_geometry() %>% select(tower_id, tower_index)
-    ) %>%
-    arrange(tower_index)
-
-  telco2 <- telco2 %>%
-    left_join(
-      towers2_voronoi %>% st_drop_geometry() %>% select(tower_id, tower_index)
-    ) %>%
-    arrange(tower_index)
-
-  # model data
-  md <- list(
-    I = sum(mastergrid_idx[], na.rm = TRUE),
-    G = G,
-    M = M,
-    H = H,
-    J1 = J1,
-    J2 = J2,
-    I_g = I_g,
-    I_m = I_m,
-    I_h = I_h,
-    I_j1 = I_j1,
-    I_j2 = I_j2,
-    grids_by_gov = grids_by_gov,
-    grids_by_mun = grids_by_mun,
-    grids_by_nbr = grids_by_nbr,
-    grids_by_tower1 = grids_by_tower1,
-    grids_by_tower2 = grids_by_tower2,
-    gg = gov_vect_idx,
-    mm = mun_vect_idx,
-    hh = nbr_vect_idx,
-    jj1 = tower1_vect,
-    jj2 = tower2_vect,
-    gov_of_mun = gov_of_mun,
-    mun_of_nbr = mun_of_nbr,
-    mun_ids = mun_ids,
-    nbr_ids = nbr_ids,
-    tents = tent_vect,
-    housing = housing_vect,
-    N_tot = 2.1e6,
-    tower1_id = telco1$tower_id,
-    tower2_id = telco2$tower_id,
-    y1 = round(telco1$subscribers),
-    y2 = round(telco2$subscribers),
-    mastergrid_idx = which(mastergrid_idx[]),
-    seed = seed
-  )
-
-  return(md)
 }
 
 init_generator <- function(md) {
   list(
     rho1 = runif(1, 0.25, 0.75),
     rho2 = runif(1, 0, 0.5),
-
     phi_tents = runif(md$I, 0, 20),
     phi_housing = runif(md$I, 0, 20)
   )
