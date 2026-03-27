@@ -186,6 +186,7 @@ if (!is.null(covariate_names)) {
 rho1_pars <- grep("^rho1\\[", variables(draws), value = TRUE)
 rho2_pars <- grep("^rho2\\[", variables(draws), value = TRUE)
 rho_pars <- c(rho1_pars, rho2_pars)
+rho_tower_summary <- NULL
 has_decay <- !is.null(md$s_rho) &&
   all(c("radius_rho1", "radius_rho2") %in% variables(draws))
 
@@ -211,6 +212,20 @@ if (length(rho_pars) > 0) {
       lower = quantile(rho, 0.025),
       upper = quantile(rho, 0.975),
       .groups = "drop"
+    )
+
+  rho_tower_summary <- rho_summary %>%
+    transmute(
+      provider = ifelse(provider == "Provider 1", 1L, 2L),
+      tower_index = tower,
+      tower_id = ifelse(
+        provider == 1L,
+        md$tower1_id[tower_index],
+        md$tower2_id[tower_index]
+      ),
+      rho_mean = mean,
+      rho_lower = lower,
+      rho_upper = upper
     )
 
   p_rho <- ggplot(
@@ -401,12 +416,186 @@ pred_summary <- pred_df %>%
     percent_error = overprediction / pmax(y_obs, 1)
   )
 
+ntower_pars <- c(
+  grep("^N_tower1\\[", variables(draws), value = TRUE),
+  grep("^N_tower2\\[", variables(draws), value = TRUE)
+)
+ntower_summary <- NULL
+
+if (length(ntower_pars) > 0) {
+  ntower_draws <- as_draws_df(fit$draws(ntower_pars)) %>%
+    select(all_of(ntower_pars)) %>%
+    mutate(.draw = row_number()) %>%
+    pivot_longer(
+      cols = -.draw,
+      names_to = c("provider", "tower"),
+      names_pattern = "N_tower(1|2)\\[(\\d+)\\]",
+      values_to = "N_tower"
+    ) %>%
+    mutate(
+      provider = as.integer(provider),
+      tower_index = as.integer(tower)
+    )
+
+  ntower_summary <- ntower_draws %>%
+    group_by(provider, tower_index) %>%
+    summarise(
+      N_tower_mean = mean(N_tower),
+      N_tower_lower = quantile(N_tower, 0.025),
+      N_tower_upper = quantile(N_tower, 0.975),
+      .groups = "drop"
+    ) %>%
+    mutate(
+      tower_id = ifelse(
+        provider == 1L,
+        md$tower1_id[tower_index],
+        md$tower2_id[tower_index]
+      )
+    )
+}
+
+if (!is.null(rho_tower_summary)) {
+  pred_summary <- pred_summary %>%
+    left_join(
+      rho_tower_summary,
+      by = c("provider", "tower_index", "tower_id")
+    )
+}
+
+if (!is.null(ntower_summary)) {
+  pred_summary <- pred_summary %>%
+    left_join(
+      ntower_summary,
+      by = c("provider", "tower_index", "tower_id")
+    ) %>%
+    mutate(
+      rho_needed = y_obs / pmax(N_tower_mean, 1),
+      rho_fit_gap = rho_mean - rho_needed,
+      rho_fit_ratio = rho_mean / pmax(rho_needed, 1e-6)
+    )
+}
+
+other_provider_support <- bind_rows(
+  lapply(seq_len(md$J1), function(j) {
+    grids <- md$grids_by_tower1[j, seq_len(md$I_j1[j])]
+    other_towers <- md$jj2[grids]
+    other_towers <- other_towers[other_towers > 0]
+    if (length(other_towers) == 0) {
+      return(NULL)
+    }
+
+    overlap_share <- as.numeric(prop.table(table(other_towers)))
+    overlap_tower_idx <- as.integer(names(table(other_towers)))
+
+    tibble(
+      provider = 1L,
+      tower_index = j,
+      tower_id = md$tower1_id[j],
+      other_provider_overlap_y = sum(overlap_share * md$y2[overlap_tower_idx]),
+      other_provider_overlap_towers = length(overlap_tower_idx),
+      other_provider_max_overlap_share = max(overlap_share)
+    )
+  }),
+  lapply(seq_len(md$J2), function(j) {
+    grids <- md$grids_by_tower2[j, seq_len(md$I_j2[j])]
+    other_towers <- md$jj1[grids]
+    other_towers <- other_towers[other_towers > 0]
+    if (length(other_towers) == 0) {
+      return(NULL)
+    }
+
+    overlap_share <- as.numeric(prop.table(table(other_towers)))
+    overlap_tower_idx <- as.integer(names(table(other_towers)))
+
+    tibble(
+      provider = 2L,
+      tower_index = j,
+      tower_id = md$tower2_id[j],
+      other_provider_overlap_y = sum(overlap_share * md$y1[overlap_tower_idx]),
+      other_provider_overlap_towers = length(overlap_tower_idx),
+      other_provider_max_overlap_share = max(overlap_share)
+    )
+  })
+)
+
+pred_summary <- pred_summary %>%
+  left_join(
+    other_provider_support,
+    by = c("provider", "tower_index", "tower_id")
+  )
+
 write.csv(
   pred_summary,
   file.path(model_out_dir, "tower_prediction_summary.csv"),
   row.names = FALSE
 )
 log_message("Wrote tower prediction summary", model_name)
+
+if (all(c("rho_mean", "rho_needed") %in% names(pred_summary))) {
+  p_rho_needed <- ggplot(
+    pred_summary,
+    aes(
+      x = rho_needed,
+      y = rho_mean,
+      ymin = rho_lower,
+      ymax = rho_upper,
+      color = factor(provider)
+    )
+  ) +
+    geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "gray30") +
+    geom_errorbar(width = 0) +
+    geom_point(size = 2, alpha = 0.85) +
+    scale_x_log10() +
+    scale_y_log10() +
+    labs(
+      x = "Implied tower penetration y / N_tower",
+      y = "Fitted tower penetration rho",
+      color = "Provider",
+      title = paste("Fitted vs Implied Tower Penetration -", model_name)
+    ) +
+    theme_minimal()
+
+  ggsave(
+    filename = file.path(model_out_dir, "rho_fitted_vs_implied.png"),
+    plot = p_rho_needed,
+    width = 8,
+    height = 6,
+    dpi = 300
+  )
+  log_message("Wrote fitted vs implied rho plot", model_name)
+}
+
+if (all(c("rho_needed", "other_provider_overlap_y") %in% names(pred_summary))) {
+  p_cross_provider <- ggplot(
+    pred_summary,
+    aes(
+      x = other_provider_overlap_y,
+      y = rho_needed,
+      color = factor(provider),
+      size = y_obs
+    )
+  ) +
+    geom_point(alpha = 0.8) +
+    scale_x_log10() +
+    scale_y_log10() +
+    labs(
+      x = "Other-provider local subscriber support",
+      y = "Implied tower penetration y / N_tower",
+      color = "Provider",
+      size = "Observed subscribers",
+      title = paste("Cross-Provider Support vs Implied Penetration -", model_name)
+    ) +
+    theme_minimal()
+
+  ggsave(
+    filename = file.path(model_out_dir, "cross_provider_support_vs_rho_needed.png"),
+    plot = p_cross_provider,
+    width = 8,
+    height = 6,
+    dpi = 300
+  )
+  log_message("Wrote cross-provider support plot", model_name)
+}
 
 
 # prediction accuaracy mapped to tower catchments
@@ -417,7 +606,7 @@ write_tower_voronoi_predictions(
   env_wd = env$wd,
   output_stem = "in_sample_prediction_summary"
 )
-log_message("Wrote tower in-sample prediction geopackages", model_name)
+  log_message("Wrote tower in-sample prediction geopackages", model_name)
 
 
 # evaluation metrics as csv

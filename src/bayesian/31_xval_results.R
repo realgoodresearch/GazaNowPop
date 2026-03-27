@@ -3,9 +3,11 @@ rm(list = ls())
 gc()
 
 # load libraries
+library(cmdstanr)
 library(dplyr)
 library(tidyr)
 library(ggplot2)
+library(posterior)
 library(here)
 
 # load environment
@@ -37,12 +39,61 @@ fold_diagnostics <- read.csv(
   file.path(model_out_dir, "fold_diagnostics.csv")
 )
 xval_artifacts <- readRDS(file.path(model_out_dir, "xval_artifacts.rds"))
+fit <- readRDS(file.path(getwd(), "out", "bayesian", model_name, "mcmc", "fit.rds"))
+md <- readRDS(file.path(getwd(), "out", "bayesian", model_name, "mcmc", "md.rds"))
 
-log_message("Loaded cross-validation artifacts", model_name)
+log_message("Loaded cross-validation artifacts and full fit", model_name)
 
 # summarize out-of-sample predictions and fold-level metrics
 oos_summary <- summarize_prediction_draws(oos_draws)
 fold_metrics <- compute_prediction_metrics(oos_summary)
+
+# join tower-level OOS errors back to Voronoi layers
+rho_pars <- c(
+  grep("^rho1\\[", fit$metadata()$model_params, value = TRUE),
+  grep("^rho2\\[", fit$metadata()$model_params, value = TRUE)
+)
+rho_tower_summary <- NULL
+
+if (length(rho_pars) > 0) {
+  rho_draws <- posterior::as_draws_df(fit$draws(rho_pars)) %>%
+    select(all_of(rho_pars)) %>%
+    mutate(.draw = row_number()) %>%
+    pivot_longer(
+      cols = -.draw,
+      names_to = c("provider", "tower"),
+      names_pattern = "rho(1|2)\\[(\\d+)\\]",
+      values_to = "rho"
+    ) %>%
+    mutate(
+      provider = as.integer(provider),
+      tower_index = as.integer(tower)
+    )
+
+  rho_tower_summary <- rho_draws %>%
+    group_by(provider, tower_index) %>%
+    summarise(
+      rho_mean = mean(rho),
+      rho_lower = quantile(rho, 0.025),
+      rho_upper = quantile(rho, 0.975),
+      .groups = "drop"
+    ) %>%
+    mutate(
+      tower_id = ifelse(
+        provider == 1L,
+        md$tower1_id[tower_index],
+        md$tower2_id[tower_index]
+      )
+    )
+}
+
+if (!is.null(rho_tower_summary)) {
+  oos_summary <- oos_summary %>%
+    left_join(
+      rho_tower_summary,
+      by = c("provider", "tower_index", "tower_id")
+    )
+}
 
 # write tabular xval outputs
 write.csv(
@@ -61,7 +112,6 @@ write.csv(
   row.names = FALSE
 )
 
-# join tower-level OOS errors back to Voronoi layers
 write_tower_voronoi_predictions(
   pred_summary = oos_summary,
   model_name = model_name,
