@@ -19,16 +19,33 @@ source(here::here("src", "bayesian", "00_fun.R"))
 dir.create(env$wd, showWarnings = FALSE, recursive = TRUE)
 setwd(env$wd)
 
+#---- USER OPTIONS ----#
+
+# reference date
+reference_date <- as.Date("2026-03-24")
+
 # model name
-model_name <- "v0.08.01"
+model_name <- "v0.11"
+
+# command line arguments can override defaults
 args <- commandArgs(trailingOnly = TRUE)
 model_name <- if (length(args) >= 1) args[[1]] else model_name
+reference_date <- if (length(args) >= 2) as.Date(args[[2]]) else reference_date
+
+#----------------------#
 
 log_message("Starting cross-validation", model_name)
 
 # directories
 src_dir <- file.path(here::here(), "src", "bayesian")
-model_out_dir <- file.path(getwd(), "out", "bayesian", model_name, "xval")
+model_out_dir <- file.path(
+  getwd(),
+  "out",
+  "bayesian",
+  model_name,
+  reference_date,
+  "xval"
+)
 fold_out_dir <- file.path(model_out_dir, "folds")
 dir.create(model_out_dir, showWarnings = FALSE, recursive = TRUE)
 dir.create(fold_out_dir, showWarnings = FALSE, recursive = TRUE)
@@ -44,6 +61,7 @@ md_full <- readRDS(file.path(
   "out",
   "bayesian",
   model_name,
+  reference_date,
   "mcmc",
   "md.rds"
 ))

@@ -17,8 +17,23 @@ env <- new.env()
 source(here::here(".env"), local = env)
 source(here::here("src", "bayesian", "00_fun.R"))
 
+#---- USER OPTIONS ----#
+
+# reference date
+reference_date <- as.Date("2026-03-24")
+
 # cores for parallel processing
 ncores <- 4
+
+# model name
+model_name <- "v0.11"
+
+# command line arguments can override defaults
+args <- commandArgs(trailingOnly = TRUE)
+model_name <- if (length(args) >= 1) args[[1]] else model_name
+reference_date <- if (length(args) >= 2) as.Date(args[[2]]) else reference_date
+
+#----------------------#
 
 # working directory
 dir.create(file.path(here::here(), "wd"), showWarnings = F, recursive = T)
@@ -27,20 +42,21 @@ setwd(file.path(here::here(), "wd"))
 # directories
 out_dir <- file.path(env$wd, "out", "bayesian")
 
-# model name
-model_name <- "v0.08"
-args <- commandArgs(trailingOnly = TRUE)
-model_name <- if (length(args) >= 1) args[[1]] else model_name
-
 log_message("Starting eval", model_name)
 
 #---- load data ----#
-fit <- readRDS(file.path(out_dir, model_name, "mcmc", "fit.rds"))
-md <- readRDS(file.path(out_dir, model_name, "mcmc", "md.rds"))
+fit <- readRDS(file.path(
+  out_dir,
+  model_name,
+  reference_date,
+  "mcmc",
+  "fit.rds"
+))
+md <- readRDS(file.path(out_dir, model_name, reference_date, "mcmc", "md.rds"))
 mastergrid <- rast(file.path(env$wd, "out", "data", "mastergrid.tif"))
 log_message("Loaded fit, model data, and mastergrid", model_name)
 
-model_out_dir <- file.path(out_dir, model_name, "eval")
+model_out_dir <- file.path(out_dir, model_name, reference_date, "eval")
 dir.create(model_out_dir, showWarnings = F, recursive = T)
 
 fit_summary <- fit$summary(.cores = ncores)
@@ -542,7 +558,12 @@ if (all(c("rho_mean", "rho_needed") %in% names(pred_summary))) {
       color = factor(provider)
     )
   ) +
-    geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "gray30") +
+    geom_abline(
+      intercept = 0,
+      slope = 1,
+      linetype = "dashed",
+      color = "gray30"
+    ) +
     geom_errorbar(width = 0) +
     geom_point(size = 2, alpha = 0.85) +
     scale_x_log10() +
@@ -583,12 +604,18 @@ if (all(c("rho_needed", "other_provider_overlap_y") %in% names(pred_summary))) {
       y = "Implied tower penetration y / N_tower",
       color = "Provider",
       size = "Observed subscribers",
-      title = paste("Cross-Provider Support vs Implied Penetration -", model_name)
+      title = paste(
+        "Cross-Provider Support vs Implied Penetration -",
+        model_name
+      )
     ) +
     theme_minimal()
 
   ggsave(
-    filename = file.path(model_out_dir, "cross_provider_support_vs_rho_needed.png"),
+    filename = file.path(
+      model_out_dir,
+      "cross_provider_support_vs_rho_needed.png"
+    ),
     plot = p_cross_provider,
     width = 8,
     height = 6,
@@ -606,7 +633,7 @@ write_tower_voronoi_predictions(
   env_wd = env$wd,
   output_stem = "in_sample_prediction_summary"
 )
-  log_message("Wrote tower in-sample prediction geopackages", model_name)
+log_message("Wrote tower in-sample prediction geopackages", model_name)
 
 
 # evaluation metrics as csv
