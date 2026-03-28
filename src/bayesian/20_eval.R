@@ -12,14 +12,13 @@ library(terra)
 library(tidyr)
 library(ggplot2)
 
-timestamp <- function() format(Sys.time(), "%Y-%m-%d %H:%M:%S %Z")
-
 # load environment
 env <- new.env()
 source(here::here(".env"), local = env)
+source(here::here("src", "bayesian", "00_fun.R"))
 
 # cores for parallel processing
-ncores <- 8
+ncores <- 4
 
 # working directory
 dir.create(file.path(here::here(), "wd"), showWarnings = F, recursive = T)
@@ -29,20 +28,33 @@ setwd(file.path(here::here(), "wd"))
 out_dir <- file.path(env$wd, "out", "bayesian")
 
 # model name
-model_name <- "v0.01"
+model_name <- "v0.08"
 args <- commandArgs(trailingOnly = TRUE)
 model_name <- if (length(args) >= 1) args[[1]] else model_name
 
-cat("[", timestamp(), "] Starting eval for ", model_name, "\n", sep = "")
+log_message("Starting eval", model_name)
 
 #---- load data ----#
 fit <- readRDS(file.path(out_dir, model_name, "mcmc", "fit.rds"))
 md <- readRDS(file.path(out_dir, model_name, "mcmc", "md.rds"))
 mastergrid <- rast(file.path(env$wd, "out", "data", "mastergrid.tif"))
-cat("[", timestamp(), "] Loaded fit, model data, and mastergrid for ", model_name, "\n", sep = "")
+log_message("Loaded fit, model data, and mastergrid", model_name)
 
 model_out_dir <- file.path(out_dir, model_name, "eval")
 dir.create(model_out_dir, showWarnings = F, recursive = T)
+
+fit_summary <- fit$summary(.cores = ncores)
+parameter_summary <- fit_summary %>%
+  filter(
+    !grepl("^(N|phi_tents|phi_housing|mu_y1|mu_y2|y1_rep|y2_rep)\\[", variable)
+  )
+
+write.csv(
+  parameter_summary,
+  file.path(model_out_dir, "parameter_summary.csv"),
+  row.names = FALSE
+)
+log_message("Wrote parameter summary", model_name)
 
 #---- traceplots ----#
 draws <- fit$draws()
@@ -62,6 +74,8 @@ pars_select <- c(
   "sigma_nbr_phi_housing",
   "sigma_mun_phi_housing",
   "sigma_gov_phi_housing",
+  "sigma_rho1",
+  "sigma_rho2",
   paste0("gov_phi_tents[", 1:md$G, "]"),
   paste0("gov_phi_housing[", 1:md$G, "]"),
   paste0("mun_phi_tents[", 1:md$M, "]"),
@@ -90,7 +104,7 @@ for (grp in par_groups) {
 }
 
 dev.off()
-cat("[", timestamp(), "] Wrote traceplots for ", model_name, "\n", sep = "")
+log_message("Wrote traceplots", model_name)
 
 # mcmc_trace(draws, pars = "sum_N")
 # mcmc_trace(draws, pars = "phi")
@@ -164,7 +178,7 @@ if (!is.null(covariate_names)) {
       height = 5,
       dpi = 300
     )
-    cat("[", timestamp(), "] Wrote covariate effects plot for ", model_name, "\n", sep = "")
+    log_message("Wrote covariate effects plot", model_name)
   }
 }
 
@@ -172,6 +186,7 @@ if (!is.null(covariate_names)) {
 rho1_pars <- grep("^rho1\\[", variables(draws), value = TRUE)
 rho2_pars <- grep("^rho2\\[", variables(draws), value = TRUE)
 rho_pars <- c(rho1_pars, rho2_pars)
+rho_tower_summary <- NULL
 has_decay <- !is.null(md$s_rho) &&
   all(c("radius_rho1", "radius_rho2") %in% variables(draws))
 
@@ -199,6 +214,20 @@ if (length(rho_pars) > 0) {
       .groups = "drop"
     )
 
+  rho_tower_summary <- rho_summary %>%
+    transmute(
+      provider = ifelse(provider == "Provider 1", 1L, 2L),
+      tower_index = tower,
+      tower_id = ifelse(
+        provider == 1L,
+        md$tower1_id[tower_index],
+        md$tower2_id[tower_index]
+      ),
+      rho_mean = mean,
+      rho_lower = lower,
+      rho_upper = upper
+    )
+
   p_rho <- ggplot(
     rho_summary,
     aes(x = tower, y = mean, ymin = lower, ymax = upper)
@@ -223,7 +252,7 @@ if (length(rho_pars) > 0) {
     height = 6,
     dpi = 300
   )
-  cat("[", timestamp(), "] Wrote tower detection plot for ", model_name, "\n", sep = "")
+  log_message("Wrote tower detection plot", model_name)
 }
 
 #---- provider-level rho decay ----#
@@ -240,7 +269,7 @@ if (has_decay_alpha || has_decay_scalar) {
   decay_draws <- as_draws_df(fit$draws(decay_pars)) %>%
     select(all_of(decay_pars))
 
-  max_distance <- 3000
+  max_distance <- 10000
 
   distance_grid <- seq(0, max_distance, length.out = 200)
 
@@ -305,7 +334,7 @@ if (has_decay_alpha || has_decay_scalar) {
     height = 5,
     dpi = 300
   )
-  cat("[", timestamp(), "] Wrote rho decay plot for ", model_name, "\n", sep = "")
+  log_message("Wrote rho decay plot", model_name)
 }
 
 #---- pop raster ----#
@@ -322,7 +351,7 @@ writeRaster(
   file.path(model_out_dir, "N_hat.tif"),
   overwrite = TRUE
 )
-cat("[", timestamp(), "] Wrote N_hat raster for ", model_name, "\n", sep = "")
+log_message("Wrote N_hat raster", model_name)
 
 #---- in sample fit ----#
 draws_df <- as_draws_df(fit$draws(c("mu_y1", "mu_y2", "y1_rep", "y2_rep")))
@@ -387,13 +416,200 @@ pred_summary <- pred_df %>%
     percent_error = overprediction / pmax(y_obs, 1)
   )
 
+ntower_pars <- c(
+  grep("^N_tower1\\[", variables(draws), value = TRUE),
+  grep("^N_tower2\\[", variables(draws), value = TRUE)
+)
+ntower_summary <- NULL
+
+if (length(ntower_pars) > 0) {
+  ntower_draws <- as_draws_df(fit$draws(ntower_pars)) %>%
+    select(all_of(ntower_pars)) %>%
+    mutate(.draw = row_number()) %>%
+    pivot_longer(
+      cols = -.draw,
+      names_to = c("provider", "tower"),
+      names_pattern = "N_tower(1|2)\\[(\\d+)\\]",
+      values_to = "N_tower"
+    ) %>%
+    mutate(
+      provider = as.integer(provider),
+      tower_index = as.integer(tower)
+    )
+
+  ntower_summary <- ntower_draws %>%
+    group_by(provider, tower_index) %>%
+    summarise(
+      N_tower_mean = mean(N_tower),
+      N_tower_lower = quantile(N_tower, 0.025),
+      N_tower_upper = quantile(N_tower, 0.975),
+      .groups = "drop"
+    ) %>%
+    mutate(
+      tower_id = ifelse(
+        provider == 1L,
+        md$tower1_id[tower_index],
+        md$tower2_id[tower_index]
+      )
+    )
+}
+
+if (!is.null(rho_tower_summary)) {
+  pred_summary <- pred_summary %>%
+    left_join(
+      rho_tower_summary,
+      by = c("provider", "tower_index", "tower_id")
+    )
+}
+
+if (!is.null(ntower_summary)) {
+  pred_summary <- pred_summary %>%
+    left_join(
+      ntower_summary,
+      by = c("provider", "tower_index", "tower_id")
+    ) %>%
+    mutate(
+      rho_needed = y_obs / pmax(N_tower_mean, 1),
+      rho_fit_gap = rho_mean - rho_needed,
+      rho_fit_ratio = rho_mean / pmax(rho_needed, 1e-6)
+    )
+}
+
+other_provider_support <- bind_rows(
+  lapply(seq_len(md$J1), function(j) {
+    grids <- md$grids_by_tower1[j, seq_len(md$I_j1[j])]
+    other_towers <- md$jj2[grids]
+    other_towers <- other_towers[other_towers > 0]
+    if (length(other_towers) == 0) {
+      return(NULL)
+    }
+
+    overlap_share <- as.numeric(prop.table(table(other_towers)))
+    overlap_tower_idx <- as.integer(names(table(other_towers)))
+
+    tibble(
+      provider = 1L,
+      tower_index = j,
+      tower_id = md$tower1_id[j],
+      other_provider_overlap_y = sum(overlap_share * md$y2[overlap_tower_idx]),
+      other_provider_overlap_towers = length(overlap_tower_idx),
+      other_provider_max_overlap_share = max(overlap_share)
+    )
+  }),
+  lapply(seq_len(md$J2), function(j) {
+    grids <- md$grids_by_tower2[j, seq_len(md$I_j2[j])]
+    other_towers <- md$jj1[grids]
+    other_towers <- other_towers[other_towers > 0]
+    if (length(other_towers) == 0) {
+      return(NULL)
+    }
+
+    overlap_share <- as.numeric(prop.table(table(other_towers)))
+    overlap_tower_idx <- as.integer(names(table(other_towers)))
+
+    tibble(
+      provider = 2L,
+      tower_index = j,
+      tower_id = md$tower2_id[j],
+      other_provider_overlap_y = sum(overlap_share * md$y1[overlap_tower_idx]),
+      other_provider_overlap_towers = length(overlap_tower_idx),
+      other_provider_max_overlap_share = max(overlap_share)
+    )
+  })
+)
+
+pred_summary <- pred_summary %>%
+  left_join(
+    other_provider_support,
+    by = c("provider", "tower_index", "tower_id")
+  )
+
 write.csv(
   pred_summary,
   file.path(model_out_dir, "tower_prediction_summary.csv"),
   row.names = FALSE
 )
-cat("[", timestamp(), "] Wrote tower prediction summary for ", model_name, "\n", sep = "")
+log_message("Wrote tower prediction summary", model_name)
 
+if (all(c("rho_mean", "rho_needed") %in% names(pred_summary))) {
+  p_rho_needed <- ggplot(
+    pred_summary,
+    aes(
+      x = rho_needed,
+      y = rho_mean,
+      ymin = rho_lower,
+      ymax = rho_upper,
+      color = factor(provider)
+    )
+  ) +
+    geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "gray30") +
+    geom_errorbar(width = 0) +
+    geom_point(size = 2, alpha = 0.85) +
+    scale_x_log10() +
+    scale_y_log10() +
+    labs(
+      x = "Implied tower penetration y / N_tower",
+      y = "Fitted tower penetration rho",
+      color = "Provider",
+      title = paste("Fitted vs Implied Tower Penetration -", model_name)
+    ) +
+    theme_minimal()
+
+  ggsave(
+    filename = file.path(model_out_dir, "rho_fitted_vs_implied.png"),
+    plot = p_rho_needed,
+    width = 8,
+    height = 6,
+    dpi = 300
+  )
+  log_message("Wrote fitted vs implied rho plot", model_name)
+}
+
+if (all(c("rho_needed", "other_provider_overlap_y") %in% names(pred_summary))) {
+  p_cross_provider <- ggplot(
+    pred_summary,
+    aes(
+      x = other_provider_overlap_y,
+      y = rho_needed,
+      color = factor(provider),
+      size = y_obs
+    )
+  ) +
+    geom_point(alpha = 0.8) +
+    scale_x_log10() +
+    scale_y_log10() +
+    labs(
+      x = "Other-provider local subscriber support",
+      y = "Implied tower penetration y / N_tower",
+      color = "Provider",
+      size = "Observed subscribers",
+      title = paste("Cross-Provider Support vs Implied Penetration -", model_name)
+    ) +
+    theme_minimal()
+
+  ggsave(
+    filename = file.path(model_out_dir, "cross_provider_support_vs_rho_needed.png"),
+    plot = p_cross_provider,
+    width = 8,
+    height = 6,
+    dpi = 300
+  )
+  log_message("Wrote cross-provider support plot", model_name)
+}
+
+
+# prediction accuaracy mapped to tower catchments
+write_tower_voronoi_predictions(
+  pred_summary = pred_summary,
+  model_name = model_name,
+  model_out_dir = model_out_dir,
+  env_wd = env$wd,
+  output_stem = "in_sample_prediction_summary"
+)
+  log_message("Wrote tower in-sample prediction geopackages", model_name)
+
+
+# evaluation metrics as csv
 coverage <- mean(
   pred_summary$y_obs >= pred_summary$y_rep_lower &
     pred_summary$y_obs <= pred_summary$y_rep_upper
@@ -402,6 +618,22 @@ coverage <- mean(
 rmse <- sqrt(mean((pred_summary$y_rep_mean - pred_summary$y_obs)^2))
 r <- cor(pred_summary$y_obs, pred_summary$y_rep_mean)
 
+eval_metrics <- data.frame(
+  model_name = model_name,
+  rmse = rmse,
+  r = r,
+  coverage = coverage
+)
+
+write.csv(
+  eval_metrics,
+  file.path(model_out_dir, "eval_metrics.csv"),
+  row.names = FALSE
+)
+log_message("Wrote eval metrics", model_name)
+
+
+# observed vs predicted plot
 label_txt <- paste0(
   "RMSE = ",
   round(rmse, 1),
@@ -444,6 +676,6 @@ ggsave(
   height = 6,
   dpi = 300
 )
-cat("[", timestamp(), "] Wrote observed vs predicted plot for ", model_name, "\n", sep = "")
+log_message("Wrote observed vs predicted plot", model_name)
 
-cat("[", timestamp(), "] Finished eval for ", model_name, "\n", sep = "")
+log_message("Finished eval", model_name)

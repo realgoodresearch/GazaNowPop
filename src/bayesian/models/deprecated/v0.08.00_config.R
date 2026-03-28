@@ -2,10 +2,12 @@ seed <- round(runif(1, 0, 1e9))
 set.seed(seed)
 
 data_dir <- file.path(env$wd, "out", "data")
+s_rho <- 250
 
 model_data <- function(covariate_rasters = NULL, ...) {
   md <- build_model_data(
     covariate_rasters = covariate_rasters,
+    s_rho = s_rho,
     seed = seed,
     ...
   )
@@ -21,6 +23,7 @@ model_data <- function(covariate_rasters = NULL, ...) {
       "gov_of_mun", "mun_of_nbr",
       "mun_ids", "nbr_ids",
       "tents", "housing",
+      "d1", "d2", "s_rho",
       "N_tot",
       "tower1_id", "tower2_id",
       "y1", "y2",
@@ -33,8 +36,14 @@ init_generator <- function(md) {
   list(
     kappa1 = exp(rnorm(1, log(10), 0.1)),
     kappa2 = exp(rnorm(1, log(10), 0.1)),
-    rho1 = exp(rnorm(1, log(0.4), 0.1)),
-    rho2 = exp(rnorm(1, log(0.2), 0.1)),
+    alpha_rho1 = rnorm(1, log(0.4), 0.1),
+    alpha_rho2 = rnorm(1, log(0.2), 0.1),
+    sigma_rho1 = exp(rnorm(1, log(0.05), 0.1)),
+    sigma_rho2 = exp(rnorm(1, log(0.05), 0.1)),
+    radius_rho1 = exp(rnorm(1, log(3000), 0.1)),
+    radius_rho2 = exp(rnorm(1, log(3000), 0.1)),
+    z_rho1 = rnorm(md$J1, 0, 0.1),
+    z_rho2 = rnorm(md$J2, 0, 0.1),
     alpha_phi_tents = rnorm(1, log(10), 0.1),
     sigma_gov_phi_tents = exp(rnorm(1, log(0.05), 0.1)),
     sigma_mun_phi_tents = exp(rnorm(1, log(0.05), 0.1)),
