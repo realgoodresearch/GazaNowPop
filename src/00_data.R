@@ -31,7 +31,7 @@ out_dir <- file.path(getwd(), "out", "data")
 dir.create(out_dir, showWarnings = F, recursive = T)
 
 #---- load data ----#
-telecoms <- read.csv(file.path(in_dir, "telecoms", "telecoms_20260309.csv"))
+telecoms <- read.csv(file.path(in_dir, "telecoms", "telecoms_20260325.csv"))
 
 gov_geo <- st_read(file.path(
   in_dir,
@@ -117,19 +117,26 @@ tent_pnts <- st_read(
 
 #-----------------#
 
-# mastergrid
-gov_ext <- ext(vect(gov_geo))
-xmin_grid <- floor(xmin(gov_ext) / grid_size) * grid_size
-xmax_grid <- ceiling(xmax(gov_ext) / grid_size) * grid_size
-ymin_grid <- floor(ymin(gov_ext) / grid_size) * grid_size
-ymax_grid <- ceiling(ymax(gov_ext) / grid_size) * grid_size
+# # mastergrid (perfectly square grids)
+# gov_ext <- ext(vect(gov_geo))
+# xmin_grid <- floor(xmin(gov_ext) / grid_size) * grid_size
+# xmax_grid <- ceiling(xmax(gov_ext) / grid_size) * grid_size
+# ymin_grid <- floor(ymin(gov_ext) / grid_size) * grid_size
+# ymax_grid <- ceiling(ymax(gov_ext) / grid_size) * grid_size
 
+# template <- rast(
+#   xmin = xmin_grid,
+#   xmax = xmax_grid,
+#   ymin = ymin_grid,
+#   ymax = ymax_grid,
+#   resolution = c(grid_size, grid_size),
+#   crs = st_crs(gov_geo)$wkt
+# )
+
+# mastergrid
 template <- rast(
-  xmin = xmin_grid,
-  xmax = xmax_grid,
-  ymin = ymin_grid,
-  ymax = ymax_grid,
-  resolution = c(grid_size, grid_size),
+  ext(gov_geo),
+  resolution = grid_size,
   crs = st_crs(gov_geo)$wkt
 )
 
