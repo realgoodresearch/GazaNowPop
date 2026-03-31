@@ -111,7 +111,7 @@ tent_pnts <- st_read(
     "tents",
     # "UNOSAT_Gaza_IDP_Tent_points_20251212.gpkg"
     # "UNOSAT_Gaza_IDP_Tent_points_20260111.gpkg"
-    "merged_tents_202602.gpkg"
+    "merged_tents_20260220_v1.gpkg"
   )
 )
 
