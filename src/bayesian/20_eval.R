@@ -105,6 +105,8 @@ pars_select <- c(
   "sigma_gov_phi_housing",
   "sigma_rho1",
   "sigma_rho2",
+  "sigma_drop1",
+  "sigma_drop2",
   "sigma_rho1_out",
   "sigma_rho2_out",
   paste0("gov_phi_tents[", 1:md$G, "]"),
