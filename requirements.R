@@ -9,7 +9,6 @@ pkgs <- c(
   'posterior',
   'bayesplot',
   'loo',
-  'here',
   'ggplot2'
 )
 
