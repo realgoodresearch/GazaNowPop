@@ -1,2 +1,6 @@
 # example contents for environment variables file to be stored in ./.env
 wd = '/home/user/git/realgoodresearch/GazaNowPop/wd'
+zitemanager_site_masterlist_report_id = 'your-site-masterlist-report-id'
+zitemanager_site_masterlist_key = 'your-site-masterlist-key'
+zitemanager_site_polygons_report_id = 'your-site-polygons-report-id'
+zitemanager_site_polygons_key = 'your-site-polygons-key'
