@@ -16,17 +16,34 @@ source(here::here("src", "bayesian", "00_fun.R"))
 dir.create(env$wd, showWarnings = F, recursive = T)
 setwd(env$wd)
 
+#---- USER OPTIONS ----#
+
+# reference date
+reference_date <- as.Date("2026-03-24")
+
 # model name
-model_name <- "v0.08"
+model_name <- "v0.11"
+
+# command line arguments can override defaults
 args <- commandArgs(trailingOnly = TRUE)
 model_name <- if (length(args) >= 1) args[[1]] else model_name
+reference_date <- if (length(args) >= 2) as.Date(args[[2]]) else reference_date
+
+#----------------------#
 
 log_message("Starting MCMC", model_name)
 
 # directories
 in_dir <- file.path(getwd(), "in")
 src_dir <- file.path(here::here(), "src", "bayesian")
-out_dir <- file.path(getwd(), "out", "bayesian", model_name, "mcmc")
+out_dir <- file.path(
+  getwd(),
+  "out",
+  "bayesian",
+  model_name,
+  reference_date,
+  "mcmc"
+)
 data_dir <- file.path(env$wd, "out", "data")
 dir.create(out_dir, showWarnings = F, recursive = T)
 
@@ -68,7 +85,10 @@ covariate_rasters <- list(
 )
 
 # model data
-md <- model_data(covariate_rasters = covariate_rasters)
+md <- model_data(
+  reference_date = reference_date,
+  covariate_rasters = covariate_rasters,
+)
 md$N1_obs <- md$J1
 md$N2_obs <- md$J2
 md$idx1_obs <- seq_len(md$J1)

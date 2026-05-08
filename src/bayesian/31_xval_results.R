@@ -19,16 +19,33 @@ source(here::here("src", "bayesian", "00_fun.R"))
 dir.create(env$wd, showWarnings = FALSE, recursive = TRUE)
 setwd(env$wd)
 
+#---- USER OPTIONS ----#
+
+# reference date
+reference_date <- as.Date("2026-03-24")
+
 # model name
 model_name <- "v0.09"
 args <- commandArgs(trailingOnly = TRUE)
+
+# command line arguments can override defaults
 model_name <- if (length(args) >= 1) args[[1]] else model_name
+reference_date <- if (length(args) >= 2) as.Date(args[[2]]) else reference_date
+
+#----------------------#
 
 log_message("Starting cross-validation results", model_name)
 
 # directories
 src_dir <- file.path(here::here(), "src", "bayesian")
-model_out_dir <- file.path(getwd(), "out", "bayesian", model_name, "xval")
+model_out_dir <- file.path(
+  getwd(),
+  "out",
+  "bayesian",
+  model_name,
+  reference_date,
+  "xval"
+)
 
 # source xval helper functions
 source(file.path(src_dir, "03_fun_xval.R"))
@@ -39,8 +56,24 @@ fold_diagnostics <- read.csv(
   file.path(model_out_dir, "fold_diagnostics.csv")
 )
 xval_artifacts <- readRDS(file.path(model_out_dir, "xval_artifacts.rds"))
-fit <- readRDS(file.path(getwd(), "out", "bayesian", model_name, "mcmc", "fit.rds"))
-md <- readRDS(file.path(getwd(), "out", "bayesian", model_name, "mcmc", "md.rds"))
+fit <- readRDS(file.path(
+  getwd(),
+  "out",
+  "bayesian",
+  model_name,
+  reference_date,
+  "mcmc",
+  "fit.rds"
+))
+md <- readRDS(file.path(
+  getwd(),
+  "out",
+  "bayesian",
+  model_name,
+  reference_date,
+  "mcmc",
+  "md.rds"
+))
 
 log_message("Loaded cross-validation artifacts and full fit", model_name)
 

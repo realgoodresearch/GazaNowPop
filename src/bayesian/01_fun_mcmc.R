@@ -85,6 +85,7 @@ select_md_fields <- function(md, fields) {
 }
 
 build_model_data <- function(
+  reference_date = NULL,
   telco1 = read.csv(file.path(data_dir, "telco1.csv")),
   telco2 = read.csv(file.path(data_dir, "telco2.csv")),
   towers1 = vect(file.path(data_dir, "towers1_geo.gpkg")),
@@ -112,13 +113,30 @@ build_model_data <- function(
 ) {
   set.seed(seed)
 
-  telco_date <- max(telco1$date)
+  telco1$date <- as.Date(telco1$date)
+  telco2$date <- as.Date(telco2$date)
+
+  if (is.null(reference_date)) {
+    telco_date <- max(telco1$date)
+  } else {
+    telco_date <- as.Date(reference_date)
+  }
 
   telco1 <- telco1 %>%
     filter(date == telco_date)
 
   telco2 <- telco2 %>%
     filter(date == telco_date)
+
+  if (nrow(telco1) == 0 || nrow(telco2) == 0) {
+    stop(
+      paste0(
+        "No telecom data found for reference_date = ",
+        as.character(telco_date),
+        "."
+      )
+    )
+  }
 
   towers1_geo <- st_as_sf(towers1) %>%
     rename(tower_id = id) %>%
@@ -135,9 +153,11 @@ build_model_data <- function(
     evac_buffer == 0 &
     (tents > 0 | housing > 0)
 
-  mastergrid_idx_vect <- which(as.vector(mastergrid[] == 1 &
-    evac_buffer[] == 0 &
-    (tents[] > 0 | housing[] > 0)))
+  mastergrid_idx_vect <- which(as.vector(
+    mastergrid[] == 1 &
+      evac_buffer[] == 0 &
+      (tents[] > 0 | housing[] > 0)
+  ))
 
   tent_vect <- as.vector(tents[mastergrid_idx])
   housing_vect <- as.vector(housing[mastergrid_idx])
@@ -458,9 +478,10 @@ build_model_data <- function(
     seed = seed
   )
 
+  attr(md, "reference_date") <- reference_date
   attr(md, "covariate_names") <- covariate_names
   attr(md, "covariate_means") <- covariate_means
   attr(md, "covariate_sds") <- covariate_sds
 
-  md
+  return(md)
 }
