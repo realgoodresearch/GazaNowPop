@@ -134,21 +134,21 @@ site_polygons <- download_report_json_csv(
 )
 
 #---- clean site masterlist ----#
-site_masterlist_clean <- site_masterlist %>%
+site_masterlist_active <- site_masterlist %>%
   filter(Site.Status == "Active")
 
 site_location_coords <- st_as_sfc(
-  site_masterlist_clean$Site.Information.Location,
+  site_masterlist_active$Site.Information.Location,
   crs = 4326
 ) %>%
   st_coordinates()
 
-site_masterlist_clean <- site_masterlist_clean %>%
+site_masterlist_clean <- site_masterlist_active %>%
   rename(all_of(site_column_map)) %>%
   mutate(
     across(
-      all_of(c(male_age_columns, female_age_columns)),
-      ~ as.numeric(.)
+      all_of(c("T_TOT", male_age_columns, female_age_columns)),
+      ~ as.integer(.)
     )
   ) %>%
   mutate(
@@ -164,10 +164,13 @@ site_masterlist_clean <- site_masterlist_clean %>%
     site_mobile_connectivity = standardize_mobile_connectivity(
       site_mobile_connectivity
     ),
-    M_TOT = rowSums(across(all_of(male_age_columns)), na.rm = TRUE),
-    M_TOT = ifelse(if_all(all_of(male_age_columns), is.na), NA, M_TOT),
-    F_TOT = rowSums(across(all_of(female_age_columns)), na.rm = TRUE),
-    F_TOT = ifelse(if_all(all_of(female_age_columns), is.na), NA, F_TOT),
+    M_TOT = as.integer(rowSums(across(all_of(male_age_columns)))),
+    F_TOT = as.integer(rowSums(across(all_of(female_age_columns)))),
+    T_TOT = ifelse(
+      is.na(T_TOT),
+      as.integer(rowSums(across(all_of(c("M_TOT", "F_TOT"))))),
+      T_TOT
+    ),
     recent_movement_households = standardize_recent_movement_households(
       recent_movement_households
     )
