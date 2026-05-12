@@ -10,7 +10,6 @@ grid_size <- 100
 library(dplyr)
 library(terra)
 library(sf)
-library(jsonlite)
 
 # encoding for Arabic
 Sys.setlocale("LC_ALL", "en_US.UTF-8")
@@ -32,7 +31,7 @@ out_dir <- file.path(getwd(), "out", "data")
 dir.create(out_dir, showWarnings = F, recursive = T)
 
 #---- load data ----#
-telecoms <- read.csv(file.path(in_dir, "telecoms", "telecoms_20260325.csv"))
+telecoms <- read.csv(file.path(in_dir, "telecoms", "telecoms_20260506.csv"))
 
 gov_geo <- st_read(file.path(
   in_dir,
@@ -112,7 +111,8 @@ tent_pnts <- st_read(
     "tents",
     # "UNOSAT_Gaza_IDP_Tent_points_20251212.gpkg"
     # "UNOSAT_Gaza_IDP_Tent_points_20260111.gpkg"
-    "merged_tents_20260220_v1.gpkg"
+    # "merged_tents_20260220_v1.gpkg"
+    "UNOSAT_Gaza_IDP_Tent_points_20260300.gpkg"
   )
 )
 
@@ -678,142 +678,4 @@ writeRaster(
   storm_vulnerability_500m,
   file.path(out_dir, "storm_vulnerability_500m.tif"),
   overwrite = TRUE
-)
-
-#---- site API exports ----#
-download_report_json_csv <- function(url, destfile) {
-  dir.create(dirname(destfile), showWarnings = FALSE, recursive = TRUE)
-
-  tmpfile <- tempfile(fileext = ".json")
-  on.exit(unlink(tmpfile), add = TRUE)
-
-  utils::download.file(url = url, destfile = tmpfile, mode = "wb", quiet = TRUE)
-
-  report_dat <- jsonlite::fromJSON(tmpfile, flatten = TRUE)
-  write.csv(report_dat, destfile, row.names = FALSE)
-
-  report_dat
-}
-
-parse_site_polygon_geometry <- function(wkt, raw_points) {
-  empty_geom <- st_as_sfc("POLYGON EMPTY", crs = 4326)[[1]]
-
-  if (!is.na(wkt) && nzchar(wkt)) {
-    wkt_geom <- tryCatch(
-      suppressWarnings(
-        suppressMessages(st_as_sfc(wkt, crs = 4326))
-      )[[1]],
-      error = function(e) NULL
-    )
-
-    if (!is.null(wkt_geom)) {
-      return(wkt_geom)
-    }
-  }
-
-  if (is.na(raw_points) || !nzchar(raw_points)) {
-    return(empty_geom)
-  }
-
-  point_strings <- strsplit(raw_points, ";", fixed = TRUE)[[1]]
-  coords_list <- lapply(point_strings, function(point_string) {
-    point_string <- trimws(point_string)
-
-    if (!nzchar(point_string)) {
-      return(NULL)
-    }
-
-    point_values <- regmatches(
-      point_string,
-      gregexpr("-?\\d+(?:\\.\\d+)?", point_string, perl = TRUE)
-    )[[1]]
-
-    if (length(point_values) < 2) {
-      return(NULL)
-    }
-
-    c(
-      as.numeric(point_values[2]),
-      as.numeric(point_values[1])
-    )
-  })
-
-  coords_list <- coords_list[!vapply(coords_list, is.null, logical(1))]
-  if (length(coords_list) < 4) {
-    return(empty_geom)
-  }
-
-  coords <- do.call(rbind, coords_list)
-
-  if (!all(coords[1, ] == coords[nrow(coords), ])) {
-    coords <- rbind(coords, coords[1, ])
-  }
-
-  st_polygon(list(coords))
-}
-
-zitemanager_base_url <- "https://app.zitemanager.org/api/v2/reports-file/"
-
-required_env_vars <- c(
-  "zitemanager_site_masterlist_report_id",
-  "zitemanager_site_masterlist_key",
-  "zitemanager_site_polygons_report_id",
-  "zitemanager_site_polygons_key"
-)
-
-missing_env_vars <- required_env_vars[
-  !nzchar(unlist(mget(
-    required_env_vars,
-    envir = env,
-    ifnotfound = list("")
-  )))
-]
-
-if (length(missing_env_vars) > 0) {
-  stop(
-    "Missing required .env values: ",
-    paste(missing_env_vars, collapse = ", ")
-  )
-}
-
-download_report_json_csv(
-  url = paste0(
-    zitemanager_base_url,
-    "?report_id=",
-    env$zitemanager_site_masterlist_report_id,
-    "&key=",
-    env$zitemanager_site_masterlist_key
-  ),
-  destfile = file.path(out_dir, "site_masterlist.csv")
-)
-
-site_polygons <- download_report_json_csv(
-  url = paste0(
-    zitemanager_base_url,
-    "?report_id=",
-    env$zitemanager_site_polygons_report_id,
-    "&key=",
-    env$zitemanager_site_polygons_key
-  ),
-  destfile = file.path(out_dir, "site_polygons.csv")
-)
-
-site_polygon_geometries <- mapply(
-  FUN = parse_site_polygon_geometry,
-  wkt = site_polygons$`Site Extent WKT [Most Recent Value]`,
-  raw_points = site_polygons$`Please walk along the limit of the site and record the coordinates of each corner point. Please be as precise as possible and count only the area of the site that you are responsible for [Most Recent Value]`,
-  SIMPLIFY = FALSE
-)
-
-site_polygons_geo <- st_sf(
-  site_polygons,
-  geometry = st_sfc(site_polygon_geometries, crs = 4326)
-) |>
-  filter(!st_is_empty(geometry)) |>
-  st_make_valid()
-
-st_write(
-  site_polygons_geo,
-  file.path(out_dir, "site_polygons.gpkg"),
-  append = FALSE
 )
