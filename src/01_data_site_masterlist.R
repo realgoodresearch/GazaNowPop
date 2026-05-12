@@ -219,3 +219,9 @@ site_masterlist_with_polygons <- site_masterlist_clean %>%
     by = c("site_id" = "Site.ID")
   ) %>%
   st_as_sf()
+
+st_write(
+  site_masterlist_with_polygons,
+  file.path(out_dir, "site_masterlist_with_polygons.gpkg"),
+  append = FALSE
+)
