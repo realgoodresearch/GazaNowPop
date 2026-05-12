@@ -79,7 +79,7 @@ site_output_columns <- append(
 )
 site_output_columns <- append(
   site_output_columns,
-  c("M_TOT", "F_TOT"),
+  c("M_TOT", "F_TOT", "T_00_05", "T_06_17", "T_18_60", "T_61_plus"),
   after = match("F_61_plus", site_output_columns)
 )
 
@@ -171,6 +171,10 @@ site_masterlist_clean <- site_masterlist_active %>%
       as.integer(rowSums(across(all_of(c("M_TOT", "F_TOT"))))),
       T_TOT
     ),
+    T_00_05 = M_00_05 + F_00_05,
+    T_06_17 = M_06_17 + F_06_17,
+    T_18_60 = M_18_60 + F_18_60,
+    T_61_plus = M_61_plus + F_61_plus,
     recent_movement_households = standardize_recent_movement_households(
       recent_movement_households
     )
