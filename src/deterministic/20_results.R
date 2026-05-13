@@ -3,7 +3,7 @@ rm(list = ls())
 gc()
 
 #---- USER OPTIONS ----#
-reference_date <- "2026-03-24"
+reference_date <- "2026-05-04"
 #----------------------#
 
 # load libraries
@@ -12,7 +12,17 @@ library(terra)
 library(sf)
 
 # encoding for Arabic
-Sys.setlocale("LC_ALL", "en_US.UTF-8") # Adjust for your OS
+set_utf8_locale <- function() {
+  for (locale in c("en_US.UTF-8", "C.UTF-8", "UTF-8")) {
+    result <- suppressWarnings(Sys.setlocale("LC_CTYPE", locale))
+    if (!is.na(result) && result != "") {
+      return(invisible(result))
+    }
+  }
+  warning("Could not set a UTF-8 locale; Arabic text may not render correctly.")
+  invisible(NULL)
+}
+set_utf8_locale()
 
 # load environment
 env <- new.env()
