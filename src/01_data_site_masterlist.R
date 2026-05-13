@@ -232,3 +232,40 @@ st_write(
   file.path(out_dir, "site_masterlist_with_polygons.gpkg"),
   append = FALSE
 )
+
+
+agesex_cols <- c(
+  "M_00_05",
+  "M_06_17",
+  "M_18_60",
+  "M_61_plus",
+  "F_00_05",
+  "F_06_17",
+  "F_18_60",
+  "F_61_plus"
+)
+
+site_masterlist_clean %>%
+  filter(if_all(all_of(agesex_cols), ~ !is.na(.))) %>%
+  nrow()
+
+site_masterlist_clean %>%
+  filter(if_all(all_of(agesex_cols), ~ !is.na(.))) %>%
+  pull(T_TOT) %>%
+  sum()
+
+site_masterlist_clean %>%
+  filter(if_all(all_of(agesex_cols), ~ !is.na(.))) %>%
+  pull(interview_type) %>%
+  table()
+
+site_masterlist_clean %>%
+  filter(if_all(all_of(agesex_cols), ~ !is.na(.))) %>%
+  group_by(interview_type) %>%
+  summarise(total_population = sum(T_TOT))
+
+
+site_masterlist_clean %>%
+  filter(if_all(all_of(agesex_cols), ~ !is.na(.))) %>%
+  group_by(assessing_agency) %>%
+  summarise(total_population = sum(T_TOT))

@@ -121,6 +121,10 @@ gov_agesex <- site_masterlist %>%
     T_18_60p = mean(T_18_60 / T_TOT),
     T_61_plus = sum(T_61_plus),
     T_61_plusp = mean(T_61_plus / T_TOT),
+    T_00_17 = sum(T_00_05, T_06_17),
+    T_00_17p = mean((T_00_05 + T_06_17) / T_TOT),
+    T_18_plus = sum(T_18_60, T_61_plus),
+    T_18_plusp = mean((T_18_60 + T_61_plus) / T_TOT),
     F_00_05 = sum(F_00_05),
     M_00_05 = sum(M_00_05),
     F_00_05p = mean(F_00_05 / T_TOT),
@@ -136,12 +140,41 @@ gov_agesex <- site_masterlist %>%
     F_61_plus = sum(F_61_plus),
     M_61_plus = sum(M_61_plus),
     F_61_plusp = mean(F_61_plus / T_TOT),
-    M_61_plusp = mean(M_61_plus / T_TOT)
+    M_61_plusp = mean(M_61_plus / T_TOT),
+    F_00_17 = sum(F_00_05, F_06_17),
+    M_00_17 = sum(M_00_05, M_06_17),
+    F_00_17p = mean((F_00_05 + F_06_17) / T_TOT),
+    M_00_17p = mean((M_00_05 + M_06_17) / T_TOT),
+    F_18_plus = sum(F_18_60, F_61_plus),
+    M_18_plus = sum(M_18_60, M_61_plus),
+    F_18_plusp = mean((F_18_60 + F_61_plus) / T_TOT),
+    M_18_plusp = mean((M_18_60 + M_61_plus) / T_TOT)
   )
 # View(gov_agesex)
 
-write.csv(gov_agesex, file.path(out_dir, "gov_agesex.csv"), row.names = FALSE)
+write.csv(
+  gov_agesex,
+  file.path(out_dir, "site_masterlist_gov_agesex.csv"),
+  row.names = FALSE
+)
 
+x <- gov_agesex %>%
+  mutate(
+    boys = paste0(round(M_00_17p * 100, 2), "%"),
+    girls = paste0(round(F_00_17p * 100, 2), "%"),
+    men = paste0(round(M_18_plusp * 100, 2), "%"),
+    women = paste0(round(F_18_plusp * 100, 2), "%"),
+    total = T_TOT
+  ) %>%
+  select(
+    ADM2_EN,
+    boys,
+    girls,
+    men,
+    women,
+    total
+  )
+View(x)
 
 #---- telecoms ----#
 

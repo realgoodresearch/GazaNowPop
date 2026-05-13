@@ -1,3 +1,8 @@
+# !! WARNING!!
+# This script overwrites existing files:
+# out/deterministic/results/[reference_date]/supplementary_data/pop_gov_[reference_date].csv
+# out/deterministic/results/[reference_date]/supplementary_data/pop_gov_[reference_date].gpkg
+
 # cleanup
 rm(list = ls())
 gc()
@@ -40,8 +45,7 @@ results_dir <- file.path(getwd(), "out", "deterministic", "results")
 out_dir <- file.path(
   results_dir,
   reference_date,
-  "supplementary_data",
-  "orange_line"
+  "supplementary_data"
 )
 dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 
@@ -58,6 +62,22 @@ pop_grid <- rast(
   )
 )
 
+pop_gov <- read.csv(file.path(
+  results_dir,
+  reference_date,
+  "supplementary_data",
+  paste0("pop_gov_", reference_date, ".csv")
+))
+
+cols_pop_gov <- names(pop_gov)
+
+pop_gov_geo <- st_read(file.path(
+  results_dir,
+  reference_date,
+  "supplementary_data",
+  paste0("pop_gov_", reference_date, ".gpkg")
+))
+
 interzone <- vect(file.path(
   in_dir,
   "evacuation_buffers",
@@ -66,12 +86,6 @@ interzone <- vect(file.path(
 
 gov_grid <- rast(file.path(data_dir, "gov_grid.tif"))
 gov_geo <- st_read(file.path(data_dir, "gov_geo.gpkg"))
-
-mun_grid <- rast(file.path(data_dir, "mun_grid.tif"))
-mun_geo <- st_read(file.path(data_dir, "mun_geo.gpkg"))
-
-nbr_grid <- rast(file.path(data_dir, "nbr_grid.tif"))
-nbr_geo <- st_read(file.path(data_dir, "nbr_geo.gpkg"))
 
 #--- process data ----#
 
@@ -85,17 +99,17 @@ interzone_ras[is.na(interzone_ras)] <- 0
 pop_interzone <- pop_grid
 pop_interzone[interzone_ras != 1] <- NA
 
-writeRaster(
-  pop_interzone,
-  file.path(
-    out_dir,
-    paste0("pop_grid_orange-yellow_", reference_date, ".tif")
-  ),
-  overwrite = TRUE
-)
+# writeRaster(
+#   pop_interzone,
+#   file.path(
+#     out_dir,
+#     paste0("pop_grid_orange-yellow_", reference_date, ".tif")
+#   ),
+#   overwrite = TRUE
+# )
 
 # governorate level
-pop_gov <- summarise_grid_per_governorate(
+pop_gov_interzone <- summarise_grid_per_governorate(
   pop_ras = pop_interzone,
   gov_poly = gov_geo,
   gov_ras = gov_grid,
@@ -107,71 +121,35 @@ pop_gov <- summarise_grid_per_governorate(
       pop_raw < 1000,
       round(pop_raw / 100) * 100,
       round(pop_raw / 1000) * 1000
-    )
+    ),
+    ADM2_PCODE = as.integer(ADM2_PCODE)
   ) %>%
+  rename(pop_orange_yellow = population) %>%
   relocate(geom, .after = last_col())
 
+pop_gov_geo_result <- pop_gov_geo %>%
+  mutate(ADM2_PCODE = as.integer(ADM2_PCODE)) %>%
+  left_join(
+    pop_gov_interzone %>%
+      st_drop_geometry() %>%
+      select(ADM2_PCODE, pop_orange_yellow),
+    by = "ADM2_PCODE"
+  ) %>%
+  select(
+    ADM2_PCODE,
+    ADM2_EN,
+    date,
+    pop_raw,
+    population,
+    pop_orange_yellow,
+    everything()
+  )
+
 write.csv(
-  pop_gov |> st_drop_geometry(),
+  pop_gov_geo_result %>% st_drop_geometry(),
   file.path(
     out_dir,
-    paste0("pop_gov_orange-yellow_", reference_date, ".csv")
+    paste0("pop_gov_orange-yellow_interzone_", reference_date, ".csv")
   ),
   row.names = F
 )
-
-
-# municipality
-pop_mun <- summarise_grid_per_municipality(
-  pop_ras = pop_interzone,
-  mun_poly = mun_geo,
-  mun_ras = mun_grid,
-  ref_date = reference_date
-) %>%
-  rename(pop_raw = population) %>%
-  mutate(
-    population = ifelse(
-      pop_raw < 1000,
-      round(pop_raw / 100) * 100,
-      round(pop_raw / 1000) * 1000
-    )
-  ) %>%
-  relocate(geom, .after = last_col())
-
-write.csv(
-  pop_mun |> st_drop_geometry(),
-  file.path(
-    out_dir,
-    paste0("pop_mun_orange-yellow_", reference_date, ".csv")
-  ),
-  row.names = F
-)
-
-
-# neighbourhood
-pop_nbr <- summarise_grid_per_neighbourhood(
-  pop_ras = pop_interzone,
-  nbr_poly = nbr_geo,
-  nbr_ras = nbr_grid,
-  ref_date = reference_date
-) %>%
-  rename(pop_raw = population) %>%
-  mutate(
-    population = ifelse(
-      pop_raw < 1000,
-      round(pop_raw / 100) * 100,
-      round(pop_raw / 1000) * 1000
-    )
-  ) %>%
-  relocate(geom, .after = last_col())
-
-write.csv(
-  pop_nbr |> st_drop_geometry(),
-  file.path(
-    out_dir,
-    paste0("pop_nbr_orange-yellow_", reference_date, ".csv")
-  ),
-  row.names = F
-)
-
-rm(pop_gov, pop_mun, pop_nbr)
