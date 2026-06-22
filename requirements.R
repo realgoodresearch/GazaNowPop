@@ -3,6 +3,7 @@ pkgs <- c(
   'dplyr',
   'terra',
   'sf',
+  'jsonlite',
   'here',
   'purrr',
   'cmdstanr',

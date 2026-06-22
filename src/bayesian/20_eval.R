@@ -9,6 +9,7 @@ library(bayesplot)
 library(dplyr)
 library(here)
 library(terra)
+library(sf)
 library(tidyr)
 library(ggplot2)
 
@@ -17,8 +18,23 @@ env <- new.env()
 source(here::here(".env"), local = env)
 source(here::here("src", "bayesian", "00_fun.R"))
 
+#---- USER OPTIONS ----#
+
+# reference date
+reference_date <- as.Date("2026-03-24")
+
 # cores for parallel processing
 ncores <- 4
+
+# model name
+model_name <- "v0.11"
+
+# command line arguments can override defaults
+args <- commandArgs(trailingOnly = TRUE)
+model_name <- if (length(args) >= 1) args[[1]] else model_name
+reference_date <- if (length(args) >= 2) as.Date(args[[2]]) else reference_date
+
+#----------------------#
 
 # working directory
 dir.create(file.path(here::here(), "wd"), showWarnings = F, recursive = T)
@@ -27,21 +43,30 @@ setwd(file.path(here::here(), "wd"))
 # directories
 out_dir <- file.path(env$wd, "out", "bayesian")
 
-# model name
-model_name <- "v0.08"
-args <- commandArgs(trailingOnly = TRUE)
-model_name <- if (length(args) >= 1) args[[1]] else model_name
-
 log_message("Starting eval", model_name)
 
 #---- load data ----#
-fit <- readRDS(file.path(out_dir, model_name, "mcmc", "fit.rds"))
-md <- readRDS(file.path(out_dir, model_name, "mcmc", "md.rds"))
+fit <- readRDS(file.path(
+  out_dir,
+  model_name,
+  reference_date,
+  "mcmc",
+  "fit.rds"
+))
+md <- readRDS(file.path(out_dir, model_name, reference_date, "mcmc", "md.rds"))
 mastergrid <- rast(file.path(env$wd, "out", "data", "mastergrid.tif"))
+gov_grid <- rast(file.path(env$wd, "out", "data", "gov_grid.tif"))
+gov_geo <- st_read(file.path(env$wd, "out", "data", "gov_geo.gpkg"), quiet = TRUE)
+mun_grid <- rast(file.path(env$wd, "out", "data", "mun_grid.tif"))
+mun_geo <- st_read(file.path(env$wd, "out", "data", "mun_geo.gpkg"), quiet = TRUE)
+nbr_grid <- rast(file.path(env$wd, "out", "data", "nbr_grid.tif"))
+nbr_geo <- st_read(file.path(env$wd, "out", "data", "nbr_geo.gpkg"), quiet = TRUE)
 log_message("Loaded fit, model data, and mastergrid", model_name)
 
-model_out_dir <- file.path(out_dir, model_name, "eval")
+model_out_dir <- file.path(out_dir, model_name, reference_date, "eval")
 dir.create(model_out_dir, showWarnings = F, recursive = T)
+supp_dir <- file.path(model_out_dir, "supplementary_data")
+dir.create(supp_dir, showWarnings = FALSE, recursive = TRUE)
 
 fit_summary <- fit$summary(.cores = ncores)
 parameter_summary <- fit_summary %>%
@@ -66,6 +91,10 @@ pars_select <- c(
   "phi",
   "phi_tents",
   "phi_housing",
+  "alpha_rho1",
+  "alpha_rho2",
+  "radius_rho1",
+  "radius_rho2",
   "alpha_phi_tents",
   "sigma_nbr_phi_tents",
   "sigma_mun_phi_tents",
@@ -76,6 +105,10 @@ pars_select <- c(
   "sigma_gov_phi_housing",
   "sigma_rho1",
   "sigma_rho2",
+  "sigma_drop1",
+  "sigma_drop2",
+  "sigma_rho1_out",
+  "sigma_rho2_out",
   paste0("gov_phi_tents[", 1:md$G, "]"),
   paste0("gov_phi_housing[", 1:md$G, "]"),
   paste0("mun_phi_tents[", 1:md$M, "]"),
@@ -338,20 +371,165 @@ if (has_decay_alpha || has_decay_scalar) {
 }
 
 #---- pop raster ----#
-N_hat <- as_draws_df(draws) %>%
+pop_draws <- as_draws_df(draws) %>%
+  select(starts_with("N["), starts_with("phi_tents["), starts_with("phi_housing["))
+
+N_hat <- pop_draws %>%
   select(starts_with("N[")) %>%
   apply(2, mean)
 
-N_rast <- mastergrid
-N_rast[N_rast == 1] <- 0
-N_rast[md$mastergrid_idx] <- N_hat
+phi_tents_hat <- pop_draws %>%
+  select(starts_with("phi_tents[")) %>%
+  apply(2, mean)
 
-writeRaster(
-  N_rast,
-  file.path(model_out_dir, "N_hat.tif"),
-  overwrite = TRUE
+phi_housing_hat <- pop_draws %>%
+  select(starts_with("phi_housing[")) %>%
+  apply(2, mean)
+
+pop_in_tents_hat <- md$tents * phi_tents_hat
+pop_in_bldgs_hat <- md$housing * phi_housing_hat
+
+write_draw_mean_raster(
+  mastergrid,
+  md$mastergrid_idx,
+  N_hat,
+  file.path(model_out_dir, "N_hat.tif")
 )
 log_message("Wrote N_hat raster", model_name)
+
+write_draw_mean_raster(
+  mastergrid,
+  md$mastergrid_idx,
+  pop_in_tents_hat,
+  file.path(model_out_dir, "pop_in_tents_hat.tif")
+)
+log_message("Wrote pop_in_tents raster", model_name)
+
+write_draw_mean_raster(
+  mastergrid,
+  md$mastergrid_idx,
+  pop_in_bldgs_hat,
+  file.path(model_out_dir, "pop_in_bldgs_hat.tif")
+)
+log_message("Wrote pop_in_bldgs raster", model_name)
+
+grid_admin_lookup <- build_grid_admin_lookup(md, gov_grid, mun_grid, nbr_grid)
+n_draws <- as.matrix(pop_draws %>% select(starts_with("N[")))
+phi_tents_draws <- as.matrix(pop_draws %>% select(starts_with("phi_tents[")))
+phi_housing_draws <- as.matrix(pop_draws %>% select(starts_with("phi_housing[")))
+pop_in_tents_draws <- sweep(phi_tents_draws, 2, md$tents, `*`)
+pop_in_bldgs_draws <- sweep(phi_housing_draws, 2, md$housing, `*`)
+
+write_eval_admin_summary <- function(level, admin_col, admin_sf, stem) {
+  total_sf <- summarise_admin_draws(
+    n_draws,
+    grid_admin_lookup,
+    admin_col,
+    admin_sf,
+    level,
+    reference_date,
+    prefix = "population"
+  )
+  tents_sf <- summarise_admin_draws(
+    pop_in_tents_draws,
+    grid_admin_lookup,
+    admin_col,
+    admin_sf,
+    level,
+    reference_date,
+    prefix = "pop_in_tents"
+  )
+  bldgs_sf <- summarise_admin_draws(
+    pop_in_bldgs_draws,
+    grid_admin_lookup,
+    admin_col,
+    admin_sf,
+    level,
+    reference_date,
+    prefix = "pop_in_bldgs"
+  )
+  prop_tents_sf <- summarise_admin_ratio_draws(
+    pop_in_tents_draws,
+    n_draws,
+    grid_admin_lookup,
+    admin_col,
+    admin_sf,
+    level,
+    reference_date,
+    prefix = "perc_in_tents"
+  )
+  prop_bldgs_sf <- summarise_admin_ratio_draws(
+    pop_in_bldgs_draws,
+    n_draws,
+    grid_admin_lookup,
+    admin_col,
+    admin_sf,
+    level,
+    reference_date,
+    prefix = "perc_in_bldgs"
+  )
+
+  key_cols <- admin_key_columns(level)
+  csv_cols <- admin_csv_columns(level)
+
+  out_sf <- total_sf %>%
+    left_join(
+      st_drop_geometry(tents_sf) %>% select(-all_of(c(csv_cols, "date"))),
+      by = "id"
+    ) %>%
+    left_join(
+      st_drop_geometry(bldgs_sf) %>% select(-all_of(c(csv_cols, "date"))),
+      by = "id"
+    ) %>%
+    left_join(
+      st_drop_geometry(prop_tents_sf) %>% select(-all_of(c(csv_cols, "date"))),
+      by = "id"
+    ) %>%
+    left_join(
+      st_drop_geometry(prop_bldgs_sf) %>% select(-all_of(c(csv_cols, "date"))),
+      by = "id"
+    )
+
+  write.csv(
+    st_drop_geometry(out_sf) %>%
+      select(
+        all_of(csv_cols),
+        date,
+        population,
+        pop_lower,
+        pop_upper,
+        starts_with("pop_in_tents"),
+        starts_with("pop_in_bldgs"),
+        starts_with("perc_in_tents"),
+        starts_with("perc_in_bldgs")
+      ),
+    file.path(supp_dir, paste0(stem, "_", reference_date, ".csv")),
+    row.names = FALSE
+  )
+
+  st_write(
+    out_sf %>%
+      select(
+        all_of(key_cols),
+        date,
+        population,
+        pop_lower,
+        pop_upper,
+        starts_with("pop_in_tents"),
+        starts_with("pop_in_bldgs"),
+        starts_with("perc_in_tents"),
+        starts_with("perc_in_bldgs")
+      ),
+    file.path(supp_dir, paste0(stem, "_", reference_date, ".gpkg")),
+    delete_dsn = TRUE,
+    quiet = TRUE
+  )
+}
+
+write_eval_admin_summary("gov", "gov_id", gov_geo, "pop_gov")
+write_eval_admin_summary("mun", "mun_id", mun_geo, "pop_mun")
+write_eval_admin_summary("nbr", "nbr_id", nbr_geo, "pop_nbr")
+log_message("Wrote admin population summaries", model_name)
 
 #---- in sample fit ----#
 draws_df <- as_draws_df(fit$draws(c("mu_y1", "mu_y2", "y1_rep", "y2_rep")))
@@ -542,7 +720,12 @@ if (all(c("rho_mean", "rho_needed") %in% names(pred_summary))) {
       color = factor(provider)
     )
   ) +
-    geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "gray30") +
+    geom_abline(
+      intercept = 0,
+      slope = 1,
+      linetype = "dashed",
+      color = "gray30"
+    ) +
     geom_errorbar(width = 0) +
     geom_point(size = 2, alpha = 0.85) +
     scale_x_log10() +
@@ -583,12 +766,18 @@ if (all(c("rho_needed", "other_provider_overlap_y") %in% names(pred_summary))) {
       y = "Implied tower penetration y / N_tower",
       color = "Provider",
       size = "Observed subscribers",
-      title = paste("Cross-Provider Support vs Implied Penetration -", model_name)
+      title = paste(
+        "Cross-Provider Support vs Implied Penetration -",
+        model_name
+      )
     ) +
     theme_minimal()
 
   ggsave(
-    filename = file.path(model_out_dir, "cross_provider_support_vs_rho_needed.png"),
+    filename = file.path(
+      model_out_dir,
+      "cross_provider_support_vs_rho_needed.png"
+    ),
     plot = p_cross_provider,
     width = 8,
     height = 6,
@@ -606,7 +795,7 @@ write_tower_voronoi_predictions(
   env_wd = env$wd,
   output_stem = "in_sample_prediction_summary"
 )
-  log_message("Wrote tower in-sample prediction geopackages", model_name)
+log_message("Wrote tower in-sample prediction geopackages", model_name)
 
 
 # evaluation metrics as csv

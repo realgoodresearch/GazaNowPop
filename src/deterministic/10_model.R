@@ -3,7 +3,7 @@ rm(list = ls())
 gc()
 
 #---- USER OPTIONS ----#
-reference_date <- "2026-03-24"
+reference_date <- "2026-05-04"
 max_tower_radius <- 2 # max tower radius (km)
 #----------------------#
 
@@ -14,7 +14,18 @@ library(sf)
 library(purrr)
 
 # encoding for Arabic
-Sys.setlocale("LC_ALL", "en_US.UTF-8")
+set_utf8_locale <- function() {
+  for (locale in c("en_US.UTF-8", "C.UTF-8", "UTF-8")) {
+    result <- suppressWarnings(Sys.setlocale("LC_CTYPE", locale))
+    if (!is.na(result) && result != "") {
+      return(invisible(result))
+    }
+  }
+  warning("Could not set a UTF-8 locale; Arabic text may not render correctly.")
+  invisible(NULL)
+}
+
+set_utf8_locale()
 
 # load environment
 env <- new.env()
@@ -67,6 +78,103 @@ bldg_destroyed <- rast(file.path(data_dir, "bldg_destroyed.tif"))
 housing <- rast(file.path(data_dir, "housing.tif"))
 housing_prop <- rast(file.path(data_dir, "housing_proportion_undamaged.tif"))
 tents <- rast(file.path(data_dir, "tent_count.tif"))
+
+site_masterlist <- read.csv(file.path(data_dir, "site_masterlist_clean.csv"))
+
+#---- gov age-sex proportions ----#
+gov_agesex <- site_masterlist %>%
+  filter(
+    if_all(
+      c(
+        T_TOT,
+        M_TOT,
+        F_TOT,
+        T_00_05,
+        T_06_17,
+        T_18_60,
+        T_61_plus,
+        M_00_05,
+        M_06_17,
+        M_18_60,
+        M_61_plus,
+        F_00_05,
+        F_06_17,
+        F_18_60,
+        F_61_plus
+      ),
+      ~ !is.na(.)
+    )
+  ) %>%
+  group_by(ADM2_PCODE) %>%
+  summarise(
+    across(c(ADM2_EN), first),
+    T_TOT = sum(T_TOT),
+    F_TOT = sum(F_TOT),
+    M_TOT = sum(M_TOT),
+    F_TOTp = mean(F_TOT / T_TOT),
+    M_TOTp = mean(M_TOT / T_TOT),
+    T_00_05 = sum(T_00_05),
+    T_00_05p = mean(T_00_05 / T_TOT),
+    T_06_17 = sum(T_06_17),
+    T_06_17p = mean(T_06_17 / T_TOT),
+    T_18_60 = sum(T_18_60),
+    T_18_60p = mean(T_18_60 / T_TOT),
+    T_61_plus = sum(T_61_plus),
+    T_61_plusp = mean(T_61_plus / T_TOT),
+    T_00_17 = sum(T_00_05, T_06_17),
+    T_00_17p = mean((T_00_05 + T_06_17) / T_TOT),
+    T_18_plus = sum(T_18_60, T_61_plus),
+    T_18_plusp = mean((T_18_60 + T_61_plus) / T_TOT),
+    F_00_05 = sum(F_00_05),
+    M_00_05 = sum(M_00_05),
+    F_00_05p = mean(F_00_05 / T_TOT),
+    M_00_05p = mean(M_00_05 / T_TOT),
+    F_06_17 = sum(F_06_17),
+    M_06_17 = sum(M_06_17),
+    F_06_17p = mean(F_06_17 / T_TOT),
+    M_06_17p = mean(M_06_17 / T_TOT),
+    F_18_60 = sum(F_18_60),
+    M_18_60 = sum(M_18_60),
+    F_18_60p = mean(F_18_60 / T_TOT),
+    M_18_60p = mean(M_18_60 / T_TOT),
+    F_61_plus = sum(F_61_plus),
+    M_61_plus = sum(M_61_plus),
+    F_61_plusp = mean(F_61_plus / T_TOT),
+    M_61_plusp = mean(M_61_plus / T_TOT),
+    F_00_17 = sum(F_00_05, F_06_17),
+    M_00_17 = sum(M_00_05, M_06_17),
+    F_00_17p = mean((F_00_05 + F_06_17) / T_TOT),
+    M_00_17p = mean((M_00_05 + M_06_17) / T_TOT),
+    F_18_plus = sum(F_18_60, F_61_plus),
+    M_18_plus = sum(M_18_60, M_61_plus),
+    F_18_plusp = mean((F_18_60 + F_61_plus) / T_TOT),
+    M_18_plusp = mean((M_18_60 + M_61_plus) / T_TOT)
+  )
+# View(gov_agesex)
+
+write.csv(
+  gov_agesex,
+  file.path(out_dir, "site_masterlist_gov_agesex.csv"),
+  row.names = FALSE
+)
+
+x <- gov_agesex %>%
+  mutate(
+    boys = paste0(round(M_00_17p * 100, 2), "%"),
+    girls = paste0(round(F_00_17p * 100, 2), "%"),
+    men = paste0(round(M_18_plusp * 100, 2), "%"),
+    women = paste0(round(F_18_plusp * 100, 2), "%"),
+    total = T_TOT
+  ) %>%
+  select(
+    ADM2_EN,
+    boys,
+    girls,
+    men,
+    women,
+    total
+  )
+View(x)
 
 #---- telecoms ----#
 
