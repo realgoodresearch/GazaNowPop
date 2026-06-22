@@ -8,7 +8,7 @@ rm(list = ls())
 gc()
 
 #---- USER OPTIONS ----#
-reference_date <- "2026-05-04"
+reference_date <- "2026-06-09"
 #----------------------#
 
 # load libraries
