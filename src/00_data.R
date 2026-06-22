@@ -31,7 +31,7 @@ out_dir <- file.path(getwd(), "out", "data")
 dir.create(out_dir, showWarnings = F, recursive = T)
 
 #---- load data ----#
-telecoms <- read.csv(file.path(in_dir, "telecoms", "telecoms_20260506.csv"))
+telecoms <- read.csv(file.path(in_dir, "telecoms", "telecoms_20260609.csv"))
 
 gov_geo <- st_read(file.path(
   in_dir,
@@ -112,7 +112,8 @@ tent_pnts <- st_read(
     # "UNOSAT_Gaza_IDP_Tent_points_20251212.gpkg"
     # "UNOSAT_Gaza_IDP_Tent_points_20260111.gpkg"
     # "merged_tents_20260220_v1.gpkg"
-    "UNOSAT_Gaza_IDP_Tent_points_20260300.gpkg"
+    "UNOSAT_Gaza_IDP_Tent_points_20260327.gpkg"
+    # "all_preds_new_20260405.gpkg"
   )
 )
 

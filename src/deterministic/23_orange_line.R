@@ -8,7 +8,7 @@ rm(list = ls())
 gc()
 
 #---- USER OPTIONS ----#
-reference_date <- "2026-05-04"
+reference_date <- "2026-06-09"
 #----------------------#
 
 # load libraries
@@ -80,7 +80,7 @@ pop_gov_geo <- st_read(file.path(
 
 interzone <- vect(file.path(
   in_dir,
-  "evacuation_buffers",
+  "other_boundaries",
   "yellow-orange-interzone_2026-03-12.gpkg"
 ))
 
